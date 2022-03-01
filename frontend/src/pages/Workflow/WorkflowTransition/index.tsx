@@ -139,7 +139,12 @@ class WorkflowTransiton extends Component<any, any> {
   onTransitionFinish = async(values) => {
     let result = {};
     values.source_state_id = Number(values.source_state_id)
-    values.destination_state_id = Number(values.destination_state_id)
+    if(values.destination_state_id){
+      values.destination_state_id = Number(values.destination_state_id)
+    }
+    else{
+      values.destination_state_id = 0
+    }
     if (values.field_require_check == true){
       values.field_require_check = 1
     } else {
@@ -385,6 +390,7 @@ class WorkflowTransiton extends Component<any, any> {
               <Switch checkedChildren="是" unCheckedChildren="否" />
             </Form.Item>
             <Form.Item name="alert_enable"
+                       valuePropName="checked"
                        label={<span>点击弹窗提示<Tooltip title="可以用于当用户在处理工单时做特定操作时，弹窗提示信息。 如用户点击'拒绝'时弹窗提示要求用户确认是否真的拒绝，避免点错"><QuestionCircleOutlined /></Tooltip></span>}>
               <Switch checkedChildren="是" unCheckedChildren="否" />
             </Form.Item>

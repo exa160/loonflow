@@ -33,12 +33,14 @@ import {
   deliverTicketRequest,
   acceptTicketRequest,
   addNodeEndTicketRequest,
-  addNodeTicketRequest, addCommentRequest
+  addNodeTicketRequest, addCommentRequest, retreatRequest
 } from "@/services/ticket";
 import {UploadOutlined} from "@ant-design/icons/lib";
 import TicketLog from "@/pages/Ticket/TicketLog";
 import WorkflowGraph from "@/pages/Workflow/WorkflowGraph";
 import TicketStep from "@/pages/Ticket/TicketStep";
+import {decodeJwt, getCookie} from "@/utils/utils";
+import TicketList from "@/pages/Ticket/TicketList";
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -54,8 +56,12 @@ export interface TicketDetailProps {
 export interface TicketDetailState {
   ticketDetailInfoData: [],
   ticketTransitionList: [],
+  ticketInfo: {},
+  isRetreatModalVisible:false,
   fieldTypeDict: {},
+  currentStateId: 0,
   fileList: {},
+  enable_retreat: false,
   nowTicketWorkflowId: 0, // 当前工单详情的workflowid
   canIntervene: false, // 是否可以干预工单
   simpleStateList: [],
@@ -69,6 +75,7 @@ export interface TicketDetailState {
   userSelectDict: {}
 
 }
+
 
 
 
@@ -124,12 +131,15 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
       ticketTransitionList: [],
       fieldTypeDict: {},
       fileList: {},
+      isRetreatModalVisible: false,
+      isCloseModalVisible: false,
+      enable_retreat: false,
+      currentStateId: 0,
       nowTicketWorkflowId: 0, // 当前工单详情的workflowid
       canIntervene: false, // 是否可以干预工单
       simpleStateList: [],
       isChangeStateModalVisible: false,
       isDeliverModalVisible: false,
-      isCloseModalVisible: false,
       isAddNodeModalVisible: false,
       newStateId:0,
       deliverFromAdmin: false,
@@ -200,7 +210,10 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
       this.fetchCanIntervene(result.data.value.workflow_id);
       this.fetchWorkflowSimpleState(result.data.value.workflow_id);
       this.setState({
+        ticketInfo: result.data,
+        enable_retreat: result.data.value.state_info.enable_retreat,
         ticketDetailInfoData: result.data.value.field_list,
+        currentStateId: result.data.value.state_id,
         nowTicketWorkflowId: result.data.value.workflow_id
       })
 
@@ -220,17 +233,33 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
             // 附件
             let newList = this.state.fileList;
             let fileList1 = [];
-            let fileList0 = result.field_value.split();
-            fileList0.forEach((file0)=>{
-              fileList1.push(
-                {
-                  url: file0,
-                  name: file0.split('/').slice(-1)[0],
-                  uid: file0
-                }
-              )
+            if(result.field_value && result.field_value.startsWith('[')) {
+              //为了兼容旧格式，所以这么写
+              const urlInfo = JSON.parse(result.field_value)
+              urlInfo.forEach((elem, index) => {
+                fileList1.push(
+                  {
+                    url: elem.url,
+                    name: elem.file_name,
+                    uid: elem.url,
+                    linkProps: `{"download": "${elem.file_name}"}`
+                  }
+                )
+              })
+            }
+            else{
+              let fileList0 = result.field_value? result.field_value.split(): [];
+              fileList0.forEach((file0)=>{
+                fileList1.push(
+                  {
+                    url: file0,
+                    name: file0.split('/').slice(-1)[0],
+                    uid: file0,
+                  }
+                )
 
-            })
+              })
+            }
 
             // newList[result.field_key] = result.field_value.split();
             newList[result.field_key] = fileList1
@@ -258,8 +287,9 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
     if (result.code === 0) {
       message.success('关闭工单成功');
       this.setState({isCloseModalVisible: false});
-      this.fetchTicketDetailInfo();
-      this.fetchTicketTransitionInfo();
+      this.props.handleTicketOk();
+      // this.fetchTicketDetailInfo();
+      // this.fetchTicketTransitionInfo();
     } else {
       message.error(`关闭工单失败:${result.msg}`)
     }
@@ -282,9 +312,13 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
     this.setState({isAddNodeModalVisible: true})
 
   }
-  showCloseTicketModal = () => {
+  showCloseModal = () => {
     this.setState({isCloseModalVisible: true})
   }
+  showRetreatModal = () => {
+    this.setState({isRetreatModalVisible: true})
+  }
+
 
   showCommentModal = () => {
     this.setState({isCommentModalVisible: true})
@@ -296,7 +330,8 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
         isDeliverModalVisible: false,
         isAddNodeModalVisible: false,
         isCommentModalVisible: false,
-        isCloseModalVisible: false
+        isCloseModalVisible: false,
+        isRetreatModalVisible: false,
       }
     )
   }
@@ -362,6 +397,18 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
     }
   }
 
+  onRetreatFinish = async(values:any) => {
+    const result =  await retreatRequest(this.props.ticketId, values);
+    if(result.code === 0) {
+      message.success('撤回成功');
+      this.setState({isRetreatModalVisible: false});
+      this.props.handleTicketOk();
+    }
+    else {
+      message.error(`撤回失败:${result.msg}`)
+    }
+  }
+
 
   fileChange = (field_key:string, info: any) => {
 
@@ -370,9 +417,10 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
     let fileList = [...info.fileList];
     if (info.file.status === 'done') {
       fileList = fileList.map(file=>{
-        if (file.response.code === 0){
+        if (file.response && file.response.code === 0){
           file.url = file.response.data.file_path
-          file.name = file.response.data.file_name
+          file.name = file.response.data.source_file_name
+          file.linkProps= `{"download": "${file.response.data.source_file_name}"}`
         }
         return file;
       })
@@ -469,12 +517,19 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
       else if (item.field_type_id === 80){
 
         child = []
-        const url_list = item.field_value.split()
-        console.log(url_list);
-        url_list.forEach((url0)=>{
+        if(item.field_value.startsWith('[')){
+          //为了兼容旧格式，所以这么写
+          const urlInfo = JSON.parse(item.field_value)
+          urlInfo.forEach((elem, index)=>{
+            child.push(<a href={elem.url}>{elem.file_name}<br/></a>)
+          })
+        } else {
+          const url_list = item.field_value.split()
+          url_list.forEach((url0)=>{
 
-          child.push(<a href={url0}>{url0.split('/').slice(-1)[0]}</a>)
-        })
+            child.push(<a href={url0}>{url0.split('/').slice(-1)[0]}</a>)
+          })
+        }
       }
       else{
         child = <div>{item.field_value}</div>
@@ -645,10 +700,11 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
         // 文件   fieldList.url
         let urlList = [];
         values[key] && values[key].fileList.map(attachment => {
-          urlList.push(attachment.url)
+          //urlList.push(attachment.url)
+          urlList.push({"url":attachment.url, "file_name":attachment.name})
 
         })
-        values[key] = urlList.join(',')
+        values[key] = JSON.stringify(urlList);
         console.log(values[key])
       }
       if (this.state.fieldTypeDict[key] === 20 ) {
@@ -656,11 +712,11 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
         values[key] = Number(values[key])
       }
 
-      if (this.state.fieldTypeDict[key] === 25 ) {
+      if (this.state.fieldTypeDict[key] === 25 && values[key] && typeof(values[key])!='string') {
         // 日期
         values[key] = values[key].format('YYYY-MM-DD')
       }
-      if (this.state.fieldTypeDict[key] === 30 && values[key]) {
+      if (this.state.fieldTypeDict[key] === 30 && values[key] && typeof(values[key])!='string') {
         // 时间
         values[key] = values[key].format('YYYY-MM-DD HH:mm:ss')
       }
@@ -768,36 +824,41 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
         </Button>
       }
       else {
-        if (result.attribute_type_id === 1) {
-          buttonItem = <Button
-            type='primary'
-            htmlType="submit"
-            value = {result.transition_id}
-            onClick={()=>this.handleTicket(result.transition_id)}
-          >
-            {result.transition_name}
-          </Button>
-        }
-        else if (result.attribute_type_id === 2) {
-          buttonItem = <Button
-            htmlType="submit"
-            type='primary'
-            danger
-            value = {result.transition_id}
-            onClick={()=>this.handleTicket(result.transition_id)}
-          >
-            {result.transition_name}
-          </Button>
+        let buttonType = 'primary';
+        let dangerAttr = false;
+        if (result.attribute_type_id === 2) {
+          dangerAttr = true
         } else if (result.attribute_type_id === 3) {
           // 其他类型
-          buttonItem = <Button
-            value = {result.transition_id}
-            htmlType="submit"
-            onClick={()=>this.handleTicket(result.transition_id)}
-          >
-            {result.transition_name}
-          </Button>
+          buttonType = "default"
         }
+          if (result.alert_enable) {
+            buttonItem = <Popconfirm
+              title={result.alert_text}
+              onConfirm={()=>this.handleTicket(result.transition_id)}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button
+                value = {result.transition_id}
+                danger = {dangerAttr}
+                type = {buttonType}
+              >
+                {result.transition_name}
+              </Button>
+            </Popconfirm>
+          } else {
+            buttonItem = <Button
+              value = {result.transition_id}
+              danger = {dangerAttr}
+              type = {buttonType}
+              htmlType="submit"
+              onClick={()=>this.handleTicket(result.transition_id)}
+            >
+              {result.transition_name}
+            </Button>
+          }
+
       }
 
       buttonItems.push(buttonItem);
@@ -826,6 +887,25 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
       )
     }
 
+    if (this.state.enable_retreat) {
+      buttonItems.push(
+        <Button type="dashed" danger onClick={this.showRetreatModal}>
+          撤回
+        </Button>
+      )
+    }
+
+    const jwtInfo = decodeJwt(getCookie('jwt'))
+    const currentUserName = jwtInfo? JSON.parse(jwtInfo).data.username: ''
+    const ticketCreator = this.state.ticketInfo? this.state.ticketInfo.value.creator: ''
+    const ticketType = this.state.ticketInfo? this.state.ticketInfo.value.state_info.type_id: 0
+    if (currentUserName === ticketCreator && ticketType===1) {
+      buttonItems.push(
+        <Button type="dashed" danger onClick={this.showCloseModal}>
+          关闭
+        </Button>
+      )
+    }
 
     return buttonItems;
   }
@@ -852,7 +932,6 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
         sm: { span: 16 },
       },
     };
-
 
     return (
       <div>
@@ -896,11 +975,14 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
 
               {handleButtonItems}
             </Form>
+
+            <TicketList category={'all'} parentTicketId={this.props.ticketId}/>
+            {/*<TicketList category={'all'} parentTicketId={this.props.ticketId} parentTicketStateId={34}/>*/}
           </Collapse.Panel>
         </Collapse>
         {this.state.canIntervene?
           <Card title="管理员操作">
-            <Button type="primary" danger onClick={this.showCloseTicketModal}>
+            <Button type="primary" danger onClick={this.showCloseModal}>
               强制关闭工单
             </Button>
             <Divider type="vertical" />
@@ -1080,7 +1162,28 @@ class TicketDetail extends Component<TicketDetailProps, TicketDetailState> {
           </Form>
         </Modal>
 
-
+        <Modal title="撤回"
+               visible={this.state.isRetreatModalVisible}
+               onCancel={this.closeModal}
+               footer={null}
+        >
+          <Form
+            onFinish={this.onRetreatFinish}
+          >
+            <Form.Item
+              name="suggestion"
+            >
+              <TextArea
+                placeholder="请输入意见"
+              />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" className="login-form-button">
+                提交
+              </Button>
+            </Form.Item>
+          </Form>
+        </Modal>
 
       </div>
     )
