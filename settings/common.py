@@ -125,9 +125,10 @@ LOGIN_URL = '/manage/login'
 
 APPEND_SLASH = False  # disable urls.W002 warning
 
-if platform.system() == 'Windows':
-    HOMEPATH = os.environ['HOMEPATH']
-else:
-    HOMEPATH = os.environ['HOME']
+HOMEPATH = os.path.dirname(os.path.realpath(__name__))
+# if platform.system() == 'Windows':
+#     HOMEPATH = os.environ['HOMEPATH']
+# else:
+#     HOMEPATH = os.environ['HOME']
 
 JWT_SALT = 'aUApFqfQjyYVAPo8'

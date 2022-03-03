@@ -1,3 +1,5 @@
+from base64 import encode
+from collections import defaultdict
 import json
 from django.http import HttpResponse
 from django.views import View
@@ -5,8 +7,9 @@ from schema import Schema, Regex, And, Or, Use, Optional
 
 from apps.loon_base_view import LoonBaseView
 from service.account.account_base_service import account_base_service_ins
-from service.format_response import api_response
+from service.format_response import api_fileresponse, api_response
 from service.ticket.ticket_base_service import ticket_base_service_ins
+from service.workflow.workflow_custom_field_service import workflow_custom_field_service_ins
 
 
 class TicketListView(LoonBaseView):
@@ -47,11 +50,11 @@ class TicketListView(LoonBaseView):
         app_name = request.META.get('HTTP_APPNAME')
 
         # 未指定创建起止时间则取最近一年的记录
-        if not(create_start or create_end):
+        if not (create_start or create_end):
             import datetime
             now = datetime.datetime.now()
             now_str = str(now)[:19]
-            last_year_time = '%4d%s' % (now.year-1, now_str[4:])
+            last_year_time = '%4d%s' % (now.year - 1, now_str[4:])
             datetime.datetime.now() - datetime.timedelta(days=365)
             create_start = last_year_time
             create_end = now_str
@@ -65,7 +68,85 @@ class TicketListView(LoonBaseView):
             paginator_info = result.get('paginator_info')
             data = dict(value=result.get('ticket_result_restful_list'), per_page=paginator_info.get('per_page'),
                         page=paginator_info.get('page'), total=paginator_info.get('total'))
-            code, msg,  = 0, ''
+            code, msg = 0, ''
+            if request_data.get('file', 0) == "true":
+                import pandas as pd
+
+                flag, result = ticket_base_service_ins.get_ticket_list(
+                    sn=sn, title=title, username=username, create_start=create_start, create_end=create_end,
+                    workflow_ids=workflow_ids, state_ids=state_ids, ticket_ids=ticket_ids, category=category,
+                    reverse=reverse,
+                    per_page=paginator_info.get('total'), page=1, app_name=app_name, act_state_id=act_state_id,
+                    from_admin=from_admin,
+                    creator=creator)
+
+                out_dict = defaultdict(list)
+                key_dict = {}
+                for i in result.get('ticket_result_restful_list'):
+                    ticket_id = i.get('id', -1)
+                    if ticket_id == -1:
+                        continue
+                    flag, ticket_result = ticket_base_service_ins.get_ticket_detail(ticket_id, username)
+
+                    if flag:
+                        # code, data = 0, dict(value=result)
+                        # t_id = ticket_result['id']
+                        # t_creator = ticket_result['creator']
+                        # t_gmt_created = ticket_result['gmt_created']
+                        # t_sn = ticket_result['sn']
+                        # t_title = ticket_result['title']
+                        t_key_list = [t_dict['field_name'] for t_dict in ticket_result['field_list']]
+                        t_value_list = [t_dict['field_value'] for t_dict in ticket_result['field_list']]
+                        t_flowid = ticket_result['workflow_id']
+                        if t_flowid != 1:
+                            continue
+                        k_list = key_dict.get(t_flowid, [])
+                        if len(k_list) == 0:
+                            flag, custom_field_dict = workflow_custom_field_service_ins.get_workflow_custom_field(
+                                t_flowid)
+                            t_list = []
+                            for value in custom_field_dict.values():
+                                field_name = value['field_name']
+                                t_list.append(field_name)
+                            key_dict.update({t_flowid: t_list + ['状态1', '状态1时间', '最新状态', '最后操作时间']})
+                        flag, log_result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, 10, 1, 0, 0)
+                        log_pages = log_result.get('paginator_info', {}).get('total', 0)
+                        log_res = log_result.get('ticket_flow_log_restful_list')
+                        state_1 = ''
+                        state_1_time = ''
+                        state_latest = ''
+                        state_latest_time = ''
+                        if len(log_res) > 1:
+                            state_1 = log_res[1].get('state', {}).get('state_name', '')
+                            state_1_time = log_res[1].get('gmt_created', '')
+                        if log_pages > 10:
+                            flag, log_result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, 10, 1,
+                                                                                           0, 1)
+                            log_res_f = log_result.get('ticket_flow_log_restful_list')[0]
+                        else:
+                            log_res_f = log_res[-1]
+                        state_latest = log_res_f.get('state', {}).get('state_name', '')
+                        state_latest_time = log_res_f.get('gmt_created', '')
+                        out_dict[t_flowid].append(
+                            pd.DataFrame([t_value_list + [state_1, state_1_time, state_latest, state_latest_time]],
+                                         columns=t_key_list + ['状态1', '状态1时间', '最新状态', '最后操作时间']))
+
+                        # msg = str(ticket_result).encode('utf-8')
+                from tempfile import TemporaryFile
+                f = TemporaryFile()
+                for key, value in out_dict.items():
+                    out_data = pd.concat([pd.DataFrame(columns=key_dict[key])] + value)
+                    f.write(out_data.to_csv(quoting=1).encode('utf-8'))
+                # f.write(str(key_dict[1]).strip('[]').encode('utf-8'))
+                # f.write('\r\n'.encode('utf-8'))
+                # f.write('\r\n'.join([str(l).strip('[]') for l in out_dict[1]]).encode('utf-8'))
+                # out_data = pd.DataFrame(out_dict[1], columns=key_dict[1])
+                # out_data = pd.DataFrame(out_dict[1])
+                # out_data.to_csv(f)
+                f.seek(0)
+                # with open(r'.\media\temp\派单平台导出全量清单.xlsx', 'rb') as f:
+                #     msg = f.read().decode('ansi').encode('utf8')
+                return api_fileresponse(f, f'派单平台导出-{create_start[:10]}-{create_end[:10]}.csv')
         else:
             code, data, msg = -1, {}, result
         return api_response(code, msg, data)
@@ -86,7 +167,8 @@ class TicketListView(LoonBaseView):
         request_data_dict.update(dict(username=request.META.get('HTTP_USERNAME')))
 
         # 判断是否有创建某工单的权限
-        app_permission, msg = account_base_service_ins.app_workflow_permission_check(app_name, request_data_dict.get('workflow_id'))
+        app_permission, msg = account_base_service_ins.app_workflow_permission_check(app_name, request_data_dict.get(
+            'workflow_id'))
         if not app_permission:
             return api_response(-1, 'APP:{} have no permission to create this workflow ticket'.format(app_name), '')
 
@@ -183,6 +265,7 @@ class TicketTransition(LoonBaseView):
     """
     工单可以做的操作
     """
+
     def get(self, request, *args, **kwargs):
         request_data = request.GET
         ticket_id = kwargs.get('ticket_id')
@@ -208,6 +291,7 @@ class TicketFlowlog(LoonBaseView):
     """
     工单流转记录
     """
+
     def get(self, request, *args, **kwargs):
         request_data = request.GET
         ticket_id = kwargs.get('ticket_id')
@@ -215,7 +299,7 @@ class TicketFlowlog(LoonBaseView):
         per_page = int(request_data.get('per_page', 10))
         page = int(request_data.get('page', 1))
         ticket_data = int(request_data.get('ticket_data', 0))
-        desc = int(request_data.get('desc', 1)) # 是否降序
+        desc = int(request_data.get('desc', 1))  # 是否降序
         app_name = request.META.get('HTTP_APPNAME')
         app_permission_check, msg = account_base_service_ins.app_ticket_permission_check(app_name, ticket_id)
         if not app_permission_check:
@@ -224,13 +308,14 @@ class TicketFlowlog(LoonBaseView):
         if not username:
             return api_response(-1, '参数不全，请提供username', '')
 
-        flag, result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, per_page, page, ticket_data, desc)
+        flag, result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, per_page, page, ticket_data,
+                                                                   desc)
 
         if flag is not False:
             paginator_info = result.get('paginator_info')
             data = dict(value=result.get('ticket_flow_log_restful_list'), per_page=paginator_info.get('per_page'),
                         page=paginator_info.get('page'), total=paginator_info.get('total'))
-            code, msg,  = 0, ''
+            code, msg = 0, ''
         else:
             code, data = -1, ''
         return api_response(code, msg, data)
@@ -240,6 +325,7 @@ class TicketFlowStep(LoonBaseView):
     """
     工单流转step: 用于显示工单当前状态的step图(线形结构，无交叉)
     """
+
     def get(self, request, *args, **kwargs):
         request_data = request.GET
         ticket_id = kwargs.get('ticket_id')
@@ -257,7 +343,7 @@ class TicketFlowStep(LoonBaseView):
         flag, result = ticket_base_service_ins.get_ticket_flow_step(ticket_id, username)
         if flag is not False:
             data = dict(value=result.get('state_step_dict_list'), current_state_id=result.get('current_state_id'))
-            code, msg,  = 0, ''
+            code, msg = 0, ''
         else:
             code, data = -1, ''
         return api_response(code, msg, data)
@@ -305,7 +391,6 @@ class TicketState(LoonBaseView):
             return api_response(-1, result, {})
         else:
             return api_response(0, '', {})
-
 
 
 class TicketsStates(LoonBaseView):
@@ -494,10 +579,6 @@ class TicketField(LoonBaseView):
         app_name = request.META.get('HTTP_APPNAME')
         app_permission_check, msg = account_base_service_ins.app_ticket_permission_check(app_name, ticket_id)
 
-
-
-
-
         if not app_permission_check:
             return api_response(-1, msg, '')
 
@@ -534,7 +615,6 @@ class TicketScriptRetry(LoonBaseView):
 
 
 class TicketComment(LoonBaseView):
-
     post_schema = Schema({
         'suggestion': And(str, lambda n: n != '', error='suggestion is needed'),
     })
@@ -683,6 +763,22 @@ class UploadFile(LoonBaseView):
         :return:
         """
         flag, result = ticket_base_service_ins.upload_file(request)
+        if flag:
+            return api_response(0, '', result)
+        else:
+            return api_response(-1, result, {})
+
+
+class UploadFile2(LoonBaseView):
+    def post(self, request, *args, **kwargs):
+        """
+        上传文件，固定文件名
+        :param request:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        flag, result = ticket_base_service_ins.upload_file2(request)
         if flag:
             return api_response(0, '', result)
         else:

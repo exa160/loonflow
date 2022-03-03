@@ -2,7 +2,7 @@ from django.urls import path
 from apps.ticket.views import TicketListView, TicketView, TicketTransition, TicketFlowlog, TicketFlowStep, TicketState, \
     TicketsStates, TicketAccept, TicketDeliver, TicketAddNode, \
     TicketAddNodeEnd, TicketField, TicketScriptRetry, TicketComment, TicketHookCallBack, TicketParticipantInfo, \
-    TicketClose, TicketsNumStatistics, TicketRetreat, UploadFile
+    TicketClose, TicketsNumStatistics, TicketRetreat, UploadFile, UploadFile2
 
 urlpatterns = [
     path('', TicketListView.as_view()),
@@ -25,5 +25,6 @@ urlpatterns = [
     path('/states', TicketsStates.as_view()),  # 批量获取工单状态
     path('/num_statistics', TicketsNumStatistics.as_view()),  # 批量获取工单状态
     path('/upload_file', UploadFile.as_view()),  # 批量获取工单状态
+    path('/upload_file2', UploadFile2.as_view()),  # 批量获取工单状态，文件名固定
 
 ]

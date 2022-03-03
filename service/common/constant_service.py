@@ -3,6 +3,7 @@ from service.base_service import BaseService
 
 class ConstantService(BaseService):
     """一些常量"""
+
     def __init__(self):
         self.ACCOUNT_TYPE_COMMON = 0  # 普通用户
         self.ACCOUNT_TYPE_WORKFLOW_ADMIN = 1  # 工作流管理员
@@ -61,11 +62,13 @@ class ConstantService(BaseService):
         self.FIELD_TYPE_CHECKBOX = 40  # 多选框
         self.FIELD_TYPE_SELECT = 45  # 下拉列表
         self.FIELD_TYPE_MULTI_SELECT = 50  # 多选下拉列表
+        self.FIELD_TYPE_MIX_SELECT = 53  # 级联下拉列表
         self.FIELD_TYPE_TEXT = 55  # 文本域
         self.FIELD_TYPE_RICH_TEXT = 58  # 富文本
         self.FIELD_TYPE_USERNAME = 60  # 用户名，前端展现时需要调用方系统获取用户列表。loonflow只保存用户名
         self.FIELD_TYPE_MULTI_USERNAME = 70  # 多选用户名,多人情况逗号隔开，前端展现时需要调用方系统获取用户列表。loonflow只保存用户名
         self.FIELD_TYPE_ATTACHMENT = 80  # 附件，多个附件使用逗号隔开。调用方自己实现上传功能，loonflow只保存文件路径
+        self.FIELD_TYPE_ATTACHMENTT = 90  # 附件，多个附件使用逗号隔开。调用方自己实现上传功能，loonflow只保存文件路径
 
         self.FIELD_ATTRIBUTE_RO = 1  # 只读
         self.FIELD_ATTRIBUTE_REQUIRED = 2  # 必填
@@ -79,25 +82,28 @@ class ConstantService(BaseService):
                                        'creator', 'is_deleted', 'gmt_created', 'gmt_modified', 'script_run_last_result']
 
         self.FIELD_VALUE_ENUM = {
-                        self.FIELD_TYPE_STR: 'char_value',
-                        self.FIELD_TYPE_INT: 'int_value',
-                        self.FIELD_TYPE_FLOAT: 'float_value',
-                        self.FIELD_TYPE_BOOL: 'bool_value',
-                        self.FIELD_TYPE_DATE: 'date_value',
-                        self.FIELD_TYPE_DATETIME: 'datetime_value',
-                        self.FIELD_TYPE_RADIO: 'radio_value',
-                        self.FIELD_TYPE_CHECKBOX: 'checkbox_value',
-                        self.FIELD_TYPE_SELECT: 'select_value',
-                        self.FIELD_TYPE_MULTI_SELECT: 'multi_select_value',
-                        self.FIELD_TYPE_TEXT: 'text_value',
-                        self.FIELD_TYPE_RICH_TEXT: 'text_value',
-                        self.FIELD_TYPE_USERNAME: 'username_value',
-                        self.FIELD_TYPE_MULTI_USERNAME: 'multi_username_value',
-                        self.FIELD_TYPE_ATTACHMENT: 'char_value'
-                    }
+            self.FIELD_TYPE_STR: 'char_value',
+            self.FIELD_TYPE_INT: 'int_value',
+            self.FIELD_TYPE_FLOAT: 'float_value',
+            self.FIELD_TYPE_BOOL: 'bool_value',
+            self.FIELD_TYPE_DATE: 'date_value',
+            self.FIELD_TYPE_DATETIME: 'datetime_value',
+            self.FIELD_TYPE_RADIO: 'radio_value',
+            self.FIELD_TYPE_CHECKBOX: 'checkbox_value',
+            self.FIELD_TYPE_SELECT: 'select_value',
+            self.FIELD_TYPE_MULTI_SELECT: 'multi_select_value',
+            self.FIELD_TYPE_MIX_SELECT: 'select_value',
+            self.FIELD_TYPE_TEXT: 'text_value',
+            self.FIELD_TYPE_RICH_TEXT: 'text_value',
+            self.FIELD_TYPE_USERNAME: 'username_value',
+            self.FIELD_TYPE_MULTI_USERNAME: 'multi_username_value',
+            self.FIELD_TYPE_ATTACHMENT: 'char_value',
+            self.FIELD_TYPE_ATTACHMENTT: 'char_value'
+        }
 
         self.NOTICE_TYPE_HOOK = 1  # hook
         self.NOTICE_TYPE_WECHAT_WORK = 2  # 企业微信消息
         self.NOTICE_TYPE_DINGTALK = 3  # 钉钉消息
+
 
 constant_service_ins = ConstantService()

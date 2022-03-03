@@ -224,19 +224,35 @@ def send_ticket_notice(ticket_id):
         notice_obj = CustomNotice.objects.filter(id=notice_id, is_deleted=0).first()
         if not notice_obj:
             continue
-        hook_url = notice_obj.hook_url
-        hook_token = notice_obj.hook_token
-        # gen signature
-        flag, headers = common_service_ins.gen_signature_by_token(hook_token)
-        try:
-            r = requests.post(hook_url, headers=headers, json=params)
-            result = r.json()
-            if result.get('code') == 0:
-                send_notice_result_list.append(dict(notice_id=notice_id, result='success', msg=result.get('msg', '')))
-            else:
-                send_notice_result_list.append(dict(notice_id=notice_id, result='fail', msg=result.get('msg', '')))
-        except Exception as e:
-            send_notice_result_list.append(dict(notice_id=notice_id, result='fail', msg=e.__str__()))
+        notice_type = notice_obj.type_id
+
+        if notice_type == 1:
+            hook_url = notice_obj.hook_url
+            hook_token = notice_obj.hook_token
+            # gen signature
+            flag, headers = common_service_ins.gen_signature_by_token(hook_token)
+            try:
+                r = requests.post(hook_url, headers=headers, json=params)
+                result = r.json()
+                if result.get('code') == 0:
+                    send_notice_result_list.append(dict(notice_id=notice_id, result='success', msg=result.get('msg', '')))
+                else:
+                    send_notice_result_list.append(dict(notice_id=notice_id, result='fail', msg=result.get('msg', '')))
+            except Exception as e:
+                send_notice_result_list.append(dict(notice_id=notice_id, result='fail', msg=e.__str__()))
+        elif notice_type == 4:
+            # send_mail('标题','普通邮件的正文','发件人','收件人列表','富文本邮件正文')
+            last_state = params.get('last_flow_log')
+            last_state_name = last_state.get('state').get('state_name')
+            last_participant_name = last_state.get('participant_info').get('participant_alias')
+            subject = '工单提醒:{}'.format(title_result)
+            mail_receivers = ['{}<{}>'.format(info.get('alias'), info.get('email')) for info in participant_info_list]
+            logger.error(mail_receivers)
+
+            html_message = """<H>{}</H></br>\n
+                            来源:{},上一步处理人:{}</br>
+                           {}</br>""".format(title_result, last_state_name, last_participant_name, content_result)
+            send_mail(subject, '', settings.EMAIL_FROM, mail_receivers, html_message=html_message)
 
     return True, dict(send_notice_result_list=send_notice_result_list)
 

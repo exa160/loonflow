@@ -1,7 +1,7 @@
 from settings.common import *
 
 # for multi computer room deploy and use separate redis server
-DEPLOY_ZONE  = ''
+DEPLOY_ZONE = ''
 
 MIDDLEWARE = [
     'service.csrf_service.DisableCSRF',
@@ -16,8 +16,7 @@ MIDDLEWARE = [
 ]
 
 DEBUG = False
-ALLOWED_HOSTS = ['*']
-
+ALLOWED_HOSTS = ['127.0.0.1']
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
@@ -27,57 +26,73 @@ MEDIA_URL = '/media/'
 
 DATABASES = {
     'default': {
-            'ENGINE': 'django.db.backends.mysql',  # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
-            'NAME': 'loonflownew',  # Or path to database file if using sqlite3.
-            'USER': 'loonflownew',  # Not used with sqlite3.
-            'PASSWORD': '123456',  # Not used with sqlite3.
-            'HOST': '127.0.0.1',  # Set to empty string for localhost. Not used with sqlite3.
-            'PORT': '3306',  # Set to empty string for default. Not used with sqlite3.
-        }
+        'ENGINE': 'django.db.backends.mysql',  # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+        'NAME': 'loonflownew',  # Or path to database file if using sqlite3.
+        'USER': 'loonflownew',  # Not used with sqlite3.
+        'PASSWORD': '123456',  # Not used with sqlite3.
+        'HOST': '127.0.0.1',  # Set to empty string for localhost. Not used with sqlite3.
+        'PORT': '3306',  # Set to empty string for default. Not used with sqlite3.
+    }
 }
 
 REDIS_HOST = '127.0.0.1'
 REDIS_PORT = 6379
 REDIS_DB = 0
-REDIS_PASSWORD = 'loonflow123'
+REDIS_PASSWORD = ''
 
 if REDIS_PASSWORD:
     CELERY_BROKER_URL = 'redis://:{}@{}:{}/{}'.format(REDIS_PASSWORD, REDIS_HOST, REDIS_PORT, REDIS_DB)
 else:
     CELERY_BROKER_URL = 'redis://{}:{}/{}'.format(REDIS_HOST, REDIS_PORT, REDIS_DB)
 
+# 配置邮件服务器
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # 指定邮件后端
+EMAIL_HOST = 'smtp.139.com'  # 发邮件主机
+EMAIL_PORT = 465  # 发邮件端口
+EMAIL_HOST_USER = 'exa160@139.com'  # 授权的邮箱
+EMAIL_HOST_PASSWORD = '7b1970c65748aa039700'  # 邮箱授权时获得的密码，非注册登录密码
+EMAIL_FROM = 'exa160@139.com'  # 发件人抬头
+# EMAIL_USE_TLS = True
+EMAIL_USE_SSL = True  # 是否使用安全协议传输
+
 LOGGING = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'filters': {
-            'require_debug_true': {
-                '()': 'django.utils.log.RequireDebugTrue',
-            },
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
         },
-        'formatters': {
-            'standard': {
-                'format': '%(asctime)s %(pathname)s process-%(process)d thread-%(thread)d %(lineno)d [%(levelname)s]: %(message)s',
-            },
+    },
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s %(pathname)s process-%(process)d thread-%(thread)d %(lineno)d [%(levelname)s] [%('
+                      'filename)s:%(lineno)d]: %(message)s',
         },
-        'handlers': {
-            'file_handler': {
-                'level': 'DEBUG',
-                'class': 'logging.FileHandler',
-                'filename': HOMEPATH + '/loonflow.log',
-                'formatter': 'standard'
-            },
-            'console': {
-                'level': 'DEBUG',
-                'filters': ['require_debug_true'],
-                'class': 'logging.StreamHandler',
-                'formatter': 'standard'
-            },
+    },
+    'handlers': {
+        'file_handler': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': HOMEPATH + '/logs/loonflow.log',
+            'formatter': 'standard'
         },
-        'loggers': {
-            'django': {
-                'handlers': ['console'],
-                'propagate': True,
-                'level': 'INFO',
-                        },
+        'console': {
+            'level': 'DEBUG',
+            'filters': ['require_debug_true'],
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard'
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file_handler'],
+            'propagate': True,
+            'level': 'INFO',
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'propagate': True,
+            'level': 'INFO',
         }
     }
+}

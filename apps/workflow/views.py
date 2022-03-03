@@ -1,5 +1,7 @@
 import json
 
+from django.conf import settings
+from django.core.mail import send_mail
 from django.views import View
 from schema import Schema, Regex, And, Or, Use, Optional
 from apps.loon_base_view import LoonBaseView
@@ -50,12 +52,13 @@ class WorkflowView(LoonBaseView):
             return api_response(code, msg, data)
         permission_workflow_id_list = result.get('workflow_id_list')
 
-        flag, result = workflow_base_service_ins.get_workflow_list(search_value, page, per_page, permission_workflow_id_list, username, from_admin)
+        flag, result = workflow_base_service_ins.get_workflow_list(search_value, page, per_page,
+                                                                   permission_workflow_id_list, username, from_admin)
         if flag is not False:
             paginator_info = result.get('paginator_info')
             data = dict(value=result.get('workflow_result_restful_list'), per_page=paginator_info.get('per_page'),
                         page=paginator_info.get('page'), total=paginator_info.get('total'))
-            code, msg,  = 0, ''
+            code, msg = 0, ''
         else:
             code, data, msg = -1, '', result
         return api_response(code, msg, data)
@@ -91,7 +94,6 @@ class WorkflowView(LoonBaseView):
         # workflow_base_service_ins.edit_workflow(
         #     workflow_id, name, description, notices, view_permission_check, limit_expression, display_form_str,
         #     workflow_admin, title_template, content_template, intervener, view_depts, view_persons, api_permission_apps)
-
 
         creator = request.META.get('HTTP_USERNAME', '')
         workflow_admin = request_data_dict.get('workflow_admin', '')
@@ -217,7 +219,6 @@ class WorkflowDetailView(LoonBaseView):
         view_persons = request_data_dict.get('view_persons', '')
         api_permission_apps = request_data_dict.get('api_permission_apps', '')
 
-
         flag, result = workflow_base_service_ins.edit_workflow(
             workflow_id, name, description, notices, view_permission_check, limit_expression, display_form_str,
             workflow_admin, title_template, content_template, intervener, view_depts, view_persons, api_permission_apps)
@@ -282,7 +283,8 @@ class WorkflowTransitionView(LoonBaseView):
         query_value = request_data.get('search_value', '')
         # if not username:
         #     return api_response(-1, '请提供username', '')
-        flag, result = workflow_transition_service_ins.get_transitions_serialize_by_workflow_id(workflow_id, per_page, page, query_value)
+        flag, result = workflow_transition_service_ins.get_transitions_serialize_by_workflow_id(workflow_id, per_page,
+                                                                                                page, query_value)
 
         if flag is not False:
             paginator_info = result.get('paginator_info')
@@ -318,9 +320,12 @@ class WorkflowTransitionView(LoonBaseView):
         field_require_check = int(request_data_dict.get('field_require_check', 0))
         alert_enable = int(request_data_dict.get('alert_enable', 0))
         alert_text = request_data_dict.get('alert_text', '')
-        flag, result = workflow_transition_service_ins.add_workflow_transition(workflow_id, name, transition_type_id, timer, source_state_id,
-                                               destination_state_id, condition_expression, attribute_type_id,
-                                               field_require_check, alert_enable, alert_text, username)
+        flag, result = workflow_transition_service_ins.add_workflow_transition(workflow_id, name, transition_type_id,
+                                                                               timer, source_state_id,
+                                                                               destination_state_id,
+                                                                               condition_expression, attribute_type_id,
+                                                                               field_require_check, alert_enable,
+                                                                               alert_text, username)
         if flag is not False:
             data = dict(value=dict(transition_id=result.get('transition_id')))
             code, msg, = 0, ''
@@ -371,10 +376,12 @@ class WorkflowTransitionDetailView(LoonBaseView):
         alert_text = request_data_dict.get('alert_text', '')
         transition_id = kwargs.get('transition_id')
         flag, result = workflow_transition_service_ins.edit_workflow_transition(transition_id, workflow_id, name,
-                                                                          transition_type_id, timer, source_state_id,
-                                                                          destination_state_id, condition_expression,
-                                                                          attribute_type_id, field_require_check,
-                                                                          alert_enable, alert_text)
+                                                                                transition_type_id, timer,
+                                                                                source_state_id,
+                                                                                destination_state_id,
+                                                                                condition_expression,
+                                                                                attribute_type_id, field_require_check,
+                                                                                alert_enable, alert_text)
         if flag is not False:
             data = {}
             code, msg, = 0, ''
@@ -454,13 +461,14 @@ class WorkflowStateView(LoonBaseView):
         page = int(request_data.get('page', 1)) if request_data.get('page', 1) else 1
         # if not username:
         #     return api_response(-1, '请提供username', '')
-        flag, result = workflow_state_service_ins.get_workflow_states_serialize(workflow_id, per_page, page, search_value)
+        flag, result = workflow_state_service_ins.get_workflow_states_serialize(workflow_id, per_page, page,
+                                                                                search_value)
 
         if flag is not False:
             paginator_info = result.get('paginator_info')
             data = dict(value=result.get('workflow_states_restful_list'), per_page=paginator_info.get('per_page'),
                         page=paginator_info.get('page'), total=paginator_info.get('total'))
-            code, msg,  = 0, ''
+            code, msg, = 0, ''
         else:
             code, data, msg = -1, {}, result
         return api_response(code, msg, data)
@@ -627,7 +635,8 @@ class WorkflowRunScriptView(LoonBaseView):
 
         if flag is not False:
             paginator_info = result.get('paginator_info')
-            data = dict(value=result.get('run_script_result_restful_list'), per_page=paginator_info.get('per_page'), page=paginator_info.get('page'),
+            data = dict(value=result.get('run_script_result_restful_list'), per_page=paginator_info.get('per_page'),
+                        page=paginator_info.get('page'),
                         total=paginator_info.get('total'))
             code, msg, = 0, ''
         else:
@@ -656,7 +665,8 @@ class WorkflowRunScriptView(LoonBaseView):
         script_name = request.POST.get('script_name', '')
         script_desc = request.POST.get('script_desc', '')
         is_active = request.POST.get('is_active', '0')
-        flag, result = workflow_run_script_service_ins.add_run_script(script_name, script_file_name, script_desc, is_active, request.user.username)
+        flag, result = workflow_run_script_service_ins.add_run_script(script_name, script_file_name, script_desc,
+                                                                      is_active, request.user.username)
         if flag is not False:
             data, code, msg = dict(script_id=result.get('script_id')), 0, ''
         else:
@@ -691,7 +701,8 @@ class WorkflowRunScriptDetailView(LoonBaseView):
         script_name = request.POST.get('script_name', '')
         script_desc = request.POST.get('script_desc', '')
         is_active = request.POST.get('is_active', '0')
-        flag, result = workflow_run_script_service_ins.edit_run_script(run_script_id, script_name, script_file_name, script_desc, is_active)
+        flag, result = workflow_run_script_service_ins.edit_run_script(run_script_id, script_name, script_file_name,
+                                                                       script_desc, is_active)
         if flag is not False:
             code, msg, data = 0, '', {}
         else:
@@ -714,6 +725,7 @@ class WorkflowRunScriptDetailView(LoonBaseView):
         else:
             code, data = -1, {}
         return api_response(code, msg, data)
+
 
 class SimpleWorkflowCustomNoticeView(LoonBaseView):
     @manage_permission_check('workflow_admin')
@@ -816,7 +828,7 @@ class WorkflowCustomNoticeView(LoonBaseView):
             name, description, type_id, corpid, corpsecret, appkey, appsecret, hook_url, hook_token, creator)
         if result is not False:
             data = msg
-            code, msg,  = 0, ''
+            code, msg, = 0, ''
         else:
             code, data = -1, {}
         return api_response(code, msg, data)
@@ -862,7 +874,6 @@ class WorkflowCustomNoticeDetailView(LoonBaseView):
         appsecret = request_data_dict.get('appsecret', '')
 
         username = request.META.get('HTTP_USERNAME')
-
 
         flag, result = account_base_service_ins.admin_permission_check(username)
         if flag is False:
@@ -944,7 +955,8 @@ class WorkflowCustomFieldView(LoonBaseView):
         page = int(request_data.get('page', 1)) if request_data.get('page', 1) else 1
         if not username:
             return api_response(-1, '请提供username', '')
-        flag, result = workflow_custom_field_service_ins.get_workflow_custom_field_list(kwargs.get('workflow_id'), search_value, page, per_page)
+        flag, result = workflow_custom_field_service_ins.get_workflow_custom_field_list(kwargs.get('workflow_id'),
+                                                                                        search_value, page, per_page)
 
         if flag is not False:
             paginator_info = result.get('paginator_info')
@@ -986,9 +998,11 @@ class WorkflowCustomFieldView(LoonBaseView):
         default_value = request_data_dict.get('default_value', '')
         boolean_field_display = request_data_dict.get('boolean_field_display', '')
         field_choice = request_data_dict.get('field_choice', '')
-        flag, result = workflow_custom_field_service_ins.add_record(workflow_id, field_type_id, field_key, field_name, order_id,
-                                                             default_value, description, field_template,
-                                                             boolean_field_display, field_choice, label, username)
+        flag, result = workflow_custom_field_service_ins.add_record(workflow_id, field_type_id, field_key, field_name,
+                                                                    order_id,
+                                                                    default_value, description, field_template,
+                                                                    boolean_field_display, field_choice, label,
+                                                                    username)
 
         if flag is not False:
             data = dict(value={'custom_field_id': result.get('custom_field_id')})
@@ -1043,9 +1057,10 @@ class WorkflowCustomFieldDetailView(LoonBaseView):
         default_value = request_data_dict.get('default_value', '')
         boolean_field_display = request_data_dict.get('boolean_field_display', '')
         field_choice = request_data_dict.get('field_choice', '')
-        result, msg = workflow_custom_field_service_ins.edit_record(custom_field_id, workflow_id, field_type_id, field_key, field_name, order_id,
-                                                            default_value, description, field_template,
-                                                            boolean_field_display, field_choice, label)
+        result, msg = workflow_custom_field_service_ins.edit_record(custom_field_id, workflow_id, field_type_id,
+                                                                    field_key, field_name, order_id,
+                                                                    default_value, description, field_template,
+                                                                    boolean_field_display, field_choice, label)
 
         if result is not False:
             code, msg, data = 0, '', {}
@@ -1128,10 +1143,57 @@ class WorkflowStatisticsView(LoonBaseView):
         start_time = request_data.get('start_time', '')
         end_time = request_data.get('end_time', '')
 
-
         flag, workflow_statistics = workflow_base_service_ins.get_statistics(workflow_id, start_time, end_time)
         if flag is False:
             code, data, msg = -1, {}, workflow_statistics
         else:
             code, data, msg = 0, workflow_statistics, ''
+        return api_response(code, msg, data)
+
+
+class WorkflowMsg(LoonBaseView):
+    def post(self, request, *args, **kwargs):
+        """
+        新增工作流自定义字段
+        :param request:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        app_name = request.META.get('HTTP_APPNAME')
+        username = request.META.get('HTTP_USERNAME')
+        workflow_id = kwargs.get('workflow_id')
+        # 判断是否有工作流的权限
+        app_permission, msg = account_base_service_ins.app_workflow_permission_check(app_name, workflow_id)
+        if not app_permission:
+            return api_response(-1, 'APP:{} have no permission to get this workflow info'.format(app_name), '')
+        json_str = request.body.decode('utf-8')
+        if not json_str:
+            return api_response(-1, 'post参数为空', {})
+        request_data_dict = json.loads(json_str)
+        # 增加参数逻辑
+        title = request_data_dict.get('title', '')
+        text = request_data_dict.get('text', '')
+        # from tasks import run_flow_task  # 放在文件开头会存在循环引用
+        # run_flow_task.apply_async(args=[title, destination_participant, destination_state_id],
+        #                           queue='loonflow')
+
+        try:
+            # send_mail('标题','普通邮件的正文','发件人','收件人列表','富文本邮件正文')
+            subject = title
+            # mail_receivers = [info.get('email') for info in participant_info_list]
+            html_message = """<H>{}</H></br>
+                               {}</br>
+                               <p></p>""".format(title, content_result)
+            send_mail(subject, text, settings.EMAIL_FROM, settings.EMAIL_FROM)
+        except Exception as e:
+            res = dict(result='fail', msg=e.__str__())
+        return True, dict(res=res)
+
+
+        if flag is not False:
+            data = dict(value={'custom_field_id': result.get('custom_field_id')})
+            code, msg, = 0, ''
+        else:
+            code, data, msg = -1, {}, res
         return api_response(code, msg, data)

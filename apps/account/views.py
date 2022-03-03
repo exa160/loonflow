@@ -1,16 +1,14 @@
 import json
 
-import jwt
-from django.shortcuts import redirect
-from django.utils.decorators import method_decorator
-from django.views import View
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+from django.utils.decorators import method_decorator
+from schema import Schema, And, Use, Optional
+
+from apps.loon_base_view import LoonBaseView
 from service.account.account_base_service import account_base_service_ins
 from service.format_response import api_response
-from apps.loon_base_view import LoonBaseView
-from schema import Schema, Regex, And, Or, Use, Optional
-
 from service.permission.manage_permission import manage_permission_check
 
 
@@ -608,8 +606,10 @@ class LoonRoleUserView(LoonBaseView):
         :return:
         """
         role_id = kwargs.get('role_id', 0)
+        page = request.GET.get('page', 1)
+        per_page = request.GET.get('per_page', 10)
         search_value = request.GET.get('search_value', '')
-        flag, result = account_base_service_ins.get_role_user_info_by_role_id(role_id, search_value)
+        flag, result = account_base_service_ins.get_role_user_info_by_role_id(role_id, search_value, page, per_page)
 
         if flag is not False:
             data = dict(value=result.get('user_result_format_list'), per_page=result.get('paginator_info').get('per_page'),
