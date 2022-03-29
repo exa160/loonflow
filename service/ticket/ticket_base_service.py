@@ -175,7 +175,7 @@ class TicketBaseService(BaseService):
             ticket_objects = TicketRecord.objects.filter(query_params).order_by(order_by_str).distinct()
         elif category == 'view':
             flag, dept_dict_info = account_base_service_ins.get_user_dept_info(username=username)
-            logger.info(f'ddi:{dept_dict_info}')
+            # logger.info(f'ddi:{dept_dict_info}')
             flag, result = workflow_permission_service_ins.get_workflow_id_list_by_permission('view', 'department', dept_dict_info['id'])
             if flag:
                 app_workflow_id_list = result.get('workflow_id_list')
