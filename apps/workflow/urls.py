@@ -4,7 +4,7 @@ from apps.workflow.views import StateView, WorkflowView, WorkflowInitView, Workf
     WorkflowRunScriptDetailView, WorkflowCustomNoticeView, WorkflowCustomNoticeDetailView, WorkflowDetailView, \
     WorkflowTransitionView, WorkflowCustomFieldView, WorkflowCustomFieldDetailView, WorkflowStateDetailView, \
     WorkflowTransitionDetailView, WorkflowUserAdminView, SimpleWorkflowCustomNoticeView, WorkflowSimpleDescriptionView, \
-    WorkflowCanInterveneView, WorkflowSimpleStateView, WorkflowStatisticsView, WorkflowMsg
+    WorkflowCanInterveneView, WorkflowSimpleStateView, WorkflowStatisticsView, WorkflowMsg, DownFile
 
 urlpatterns = [
     path('', WorkflowView.as_view()),
@@ -29,6 +29,7 @@ urlpatterns = [
     path('/simple_custom_notices', SimpleWorkflowCustomNoticeView.as_view()),
     path('/custom_notices/<int:notice_id>', WorkflowCustomNoticeDetailView.as_view()),
 
-    path('/mailmsg', WorkflowMsg.as_view())
+    path('/mailmsg', WorkflowMsg.as_view()),
+    path('/download', DownFile.as_view())
 
 ]

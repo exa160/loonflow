@@ -6,7 +6,7 @@ from django.views import View
 from schema import Schema, Regex, And, Or, Use, Optional
 from apps.loon_base_view import LoonBaseView
 from service.account.account_base_service import account_base_service_ins
-from service.format_response import api_response
+from service.format_response import api_fileresponse, api_response
 from service.permission.manage_permission import manage_permission_check
 from service.workflow.workflow_base_service import workflow_base_service_ins
 from service.workflow.workflow_custom_field_service import workflow_custom_field_service_ins
@@ -1197,3 +1197,9 @@ class WorkflowMsg(LoonBaseView):
         else:
             code, data, msg = -1, {}, res
         return api_response(code, msg, data)
+
+
+class DownFile(LoonBaseView):
+    @manage_permission_check('workflow_admin')
+    def get(self, request, *args, **kwargs):
+        return api_fileresponse(open(r'.\media\ticket_file\派单平台导出全量清单.csv', 'rb'), 'all_camera_data.csv', 'text/csv')

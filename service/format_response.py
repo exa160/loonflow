@@ -14,7 +14,7 @@ def api_response(code, msg='', data=''):
     return HttpResponse(json.dumps(dict(code=code, data=data, msg=msg)), content_type="application/json")
 
 
-def api_fileresponse(data, name):
-    res = StreamingHttpResponse(data, content_type="application/octet-stream")
+def api_fileresponse(data, name, content_type="application/octet-stream"):
+    res = StreamingHttpResponse(data, content_type=content_type)
     res['Content-Disposition'] = 'attachment;filename="{}"'.format(name)
     return res

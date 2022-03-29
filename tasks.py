@@ -6,10 +6,12 @@ import traceback
 import logging
 from celery import Celery
 
-
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings.config')
 import django
+from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
+
 django.setup()
 
 app = Celery('loonflow')
@@ -41,16 +43,16 @@ except ImportError:
 logger = logging.getLogger('django')
 
 
-
 @app.task(bind=True)
 def debug_task(self):
     print('Request: {0!r}'.format(self.request))
+
 
 @app.task
 def test_task(a, b):
     print('a:', a)
     print('b:', b)
-    print(a+b)
+    print(a + b)
 
 
 @contextlib.contextmanager
@@ -110,8 +112,10 @@ def run_flow_task(ticket_id, script_id_str, state_id, action_from='loonrobot'):
         transition_obj = Transition.objects.filter(source_state_id=state_id, is_deleted=False).first()
 
         new_ticket_flow_dict = dict(ticket_id=ticket_id, transition_id=transition_obj.id,
-                                    suggestion=script_result_msg, participant_type_id=constant_service_ins.PARTICIPANT_TYPE_ROBOT,
-                                    participant='脚本:(id:{}, name:{})'.format(script_obj.id, script_obj.name), state_id=state_id, creator='loonrobot')
+                                    suggestion=script_result_msg,
+                                    participant_type_id=constant_service_ins.PARTICIPANT_TYPE_ROBOT,
+                                    participant='脚本:(id:{}, {}, {})'.format(script_obj.id, script_obj.name, script_result_msg)[:49],
+                                    state_id=state_id, creator='loonrobot')
 
         ticket_base_service_ins.add_ticket_flow_log(new_ticket_flow_dict)
         if not script_result:
@@ -121,8 +125,8 @@ def run_flow_task(ticket_id, script_id_str, state_id, action_from='loonrobot'):
             return False, script_result_msg
         # 自动执行流转
         flag, msg = ticket_base_service_ins.handle_ticket(ticket_id, dict(username='loonrobot',
-                                                                    suggestion='脚本执行完成后自行流转',
-                                                                    transition_id=transition_obj.id), False, True)
+                                                                          suggestion='脚本执行完成后自行流转',
+                                                                          transition_id=transition_obj.id), False, True)
         if flag:
             logger.info('******脚本执行成功,工单基础信息更新完成, ticket_id:{}******'.format(ticket_id))
         return flag, msg
@@ -215,11 +219,12 @@ def send_ticket_notice(ticket_id):
         for participant_0 in participant_queryset:
             participant_info_list.append(dict(username=participant_0.username, alias=participant_0.alias,
                                               phone=participant_0.phone, email=participant_0.email))
-
     params = {'title_result': title_result, 'content_result': content_result,
-               'participant': ticket_obj.participant, 'participant_type_id': ticket_obj.participant_type_id,
-               'multi_all_person': ticket_obj.multi_all_person, 'ticket_value_info': ticket_value_info,
-               'last_flow_log': last_flow_log, 'participant_info_list': participant_info_list}
+              'participant': ticket_obj.participant, 'participant_type_id': ticket_obj.participant_type_id,
+              'multi_all_person': ticket_obj.multi_all_person, 'ticket_value_info': ticket_value_info,
+              'last_flow_log': last_flow_log, 'participant_info_list': participant_info_list}
+    #logger.debug(params)
+
     for notice_id in notice_id_list:
         notice_obj = CustomNotice.objects.filter(id=notice_id, is_deleted=0).first()
         if not notice_obj:
@@ -242,17 +247,21 @@ def send_ticket_notice(ticket_id):
                 send_notice_result_list.append(dict(notice_id=notice_id, result='fail', msg=e.__str__()))
         elif notice_type == 4:
             # send_mail('标题','普通邮件的正文','发件人','收件人列表','富文本邮件正文')
+            # logger.info(params)
             last_state = params.get('last_flow_log')
             last_state_name = last_state.get('state').get('state_name')
             last_participant_name = last_state.get('participant_info').get('participant_alias')
+            ticket_sn = ticket_value_info.get('sn')
+            
             subject = '工单提醒:{}'.format(title_result)
             mail_receivers = ['{}<{}>'.format(info.get('alias'), info.get('email')) for info in participant_info_list]
-            logger.error(mail_receivers)
-
-            html_message = """<H>{}</H></br>\n
-                            来源:{},上一步处理人:{}</br>
-                           {}</br>""".format(title_result, last_state_name, last_participant_name, content_result)
+            html_message = f"""<h2>{title_result}</h2><br>
+                           {content_result}<br><br>工单来自:{last_state_name}，处理人:{last_participant_name}，流水号：{ticket_sn}<br>请访问<a href="http://36.134.147.61:10000/" target=blank>工单平台</a>进行处理"""
+            # msg = EmailMultiAlternatives(subject, html_message, settings.EMAIL_FROM, mail_receivers)
+            # msg.attach_alternative(html_message, "text/html")
+            # msg.send()
             send_mail(subject, '', settings.EMAIL_FROM, mail_receivers, html_message=html_message)
+            # send_mail(subject, html_message.replace('</br>', '\r\n'), settings.EMAIL_FROM, mail_receivers)
 
     return True, dict(send_notice_result_list=send_notice_result_list)
 
@@ -273,7 +282,7 @@ def flow_hook_task(ticket_id):
     if participant_type_id != constant_service_ins.PARTICIPANT_TYPE_HOOK:
         return False, ''
     hook_config = state_obj.participant
-    hook_config_dict= json.loads(hook_config)
+    hook_config_dict = json.loads(hook_config)
     hook_url = hook_config_dict.get('hook_url')
     hook_token = hook_config_dict.get('hook_token')
     wait = hook_config_dict.get('wait')
@@ -306,7 +315,7 @@ def flow_hook_task(ticket_id):
                                                          intervene_type_id=constant_service_ins.TRANSITION_INTERVENE_TYPE_HOOK,
                                                          ticket_data=all_ticket_data_json,
                                                          creator='loonrobot'
-                                                      ))
+                                                         ))
             return True, ''
         else:
             # 不等待hook目标回调，直接流转
@@ -321,7 +330,7 @@ def flow_hook_task(ticket_id):
                 return False, msg
 
     else:
-        ticket_base_service_ins.update_ticket_field_value(ticket_id,{'script_run_last_result': False})
+        ticket_base_service_ins.update_ticket_field_value(ticket_id, {'script_run_last_result': False})
 
         flag, all_field_value_result = ticket_base_service_ins.get_ticket_all_field_value_json(ticket_id)
 
@@ -329,4 +338,4 @@ def flow_hook_task(ticket_id):
         ticket_base_service_ins.add_ticket_flow_log(
             dict(ticket_id=ticket_id, transition_id=0, suggestion=result.get('msg'),
                  participant_type_id=constant_service_ins.PARTICIPANT_TYPE_HOOK,
-                 participant='hook', state_id=state_id, ticket_data=all_ticket_data_json, creator='loonrobot' ))
+                 participant='hook', state_id=state_id, ticket_data=all_ticket_data_json, creator='loonrobot'))

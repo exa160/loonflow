@@ -99,6 +99,10 @@ class TicketBaseService(BaseService):
 
         if kwargs.get('creator') != '':
             query_params &= Q(creator=kwargs.get('creator'))
+        if kwargs.get('parent_ticket_id'):
+            query_params &= Q(parent_ticket_id=kwargs.get('parent_ticket_id'))
+        if kwargs.get('parent_ticket_state_id'):
+            query_params &= Q(parent_ticket_state_id=kwargs.get('parent_ticket_state_id'))
 
         if sn:
             query_params &= Q(sn__startswith=sn)
@@ -111,6 +115,7 @@ class TicketBaseService(BaseService):
         if workflow_ids:
             workflow_id_str_list = workflow_ids.split(',')
             query_workflow_id_list = [int(workflow_id_str) for workflow_id_str in workflow_id_str_list]
+            query_params &= Q(workflow_id__in=query_workflow_id_list)
         else:
             query_workflow_id_list = []
 
@@ -132,6 +137,7 @@ class TicketBaseService(BaseService):
                     permission_workflow_id_set - (permission_workflow_id_set - set(query_workflow_id_list)))
             else:
                 ending_workflow_id_list = list(permission_workflow_id_set)
+            query_params &= Q(workflow_id__in=ending_workflow_id_list)
         else:
             if query_workflow_id_list:
                 ending_workflow_id_list = list(
@@ -139,7 +145,7 @@ class TicketBaseService(BaseService):
             else:
                 ending_workflow_id_list = app_workflow_id_list
 
-        query_params &= Q(workflow_id__in=ending_workflow_id_list)
+        # query_params &= Q(workflow_id__in=ending_workflow_id_list)
 
         if reverse:
             order_by_str = '-gmt_created'
@@ -166,6 +172,15 @@ class TicketBaseService(BaseService):
         elif category == 'worked':
             worked_query_expression = Q(ticketuser__username=username, ticketuser__worked=True)
             query_params &= worked_query_expression
+            ticket_objects = TicketRecord.objects.filter(query_params).order_by(order_by_str).distinct()
+        elif category == 'view':
+            flag, dept_dict_info = account_base_service_ins.get_user_dept_info(username=username)
+            logger.info(f'ddi:{dept_dict_info}')
+            flag, result = workflow_permission_service_ins.get_workflow_id_list_by_permission('view', 'department', dept_dict_info['id'])
+            if flag:
+                app_workflow_id_list = result.get('workflow_id_list')
+                query_params &= Q(workflow_id__in=app_workflow_id_list)
+                # logger.info(f"app_workflow_ids:{app_workflow_id_list}")
             ticket_objects = TicketRecord.objects.filter(query_params).order_by(order_by_str).distinct()
         else:
             ticket_objects = TicketRecord.objects.filter(query_params).order_by(order_by_str).distinct()
@@ -660,7 +675,7 @@ class TicketBaseService(BaseService):
         else:
             # only read permission
             flag, workflow_obj = workflow_base_service_ins.get_by_id(workflow_id=ticket_obj.workflow_id)
-            display_form_field_list = json.loads(workflow_obj.display_form_str)
+            display_form_field_list = json.loads(workflow_obj.display_form_str) if workflow_obj.display_form_str else []
             for field in field_list:
                 if field['field_key'] in display_form_field_list:
                     new_field_list.append(field)
@@ -716,57 +731,57 @@ class TicketBaseService(BaseService):
         field_list.append(dict(field_key='sn', field_name=u'流水号', field_value=ticket_obj.sn, order_id=10,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
                                field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO,
-                               description='工单的流水号', field_choice={}, boolean_field_display={}, default_value=None,
+                               description='', field_choice={}, boolean_field_display={}, default_value=None,
                                field_template='', label={}, placeholder=''))
         field_list.append(dict(field_key='title', field_name=u'标题', field_value=ticket_obj.title, order_id=20,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的标题',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='state_id', field_name=u'状态id', field_value=ticket_obj.state_id, order_id=40,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单当前状态的id',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='participant_info.participant_name', field_name=u'当前处理人',
                                field_value=participant_info_dict['participant_name'], order_id=50,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的当前处理人',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='participant_info.participant_alias', field_name=u'当前处理人',
                                field_value=participant_info_dict['participant_alias'], order_id=55,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
                                field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO,
-                               description='工单当前处理人(alias)', field_choice={}, boolean_field_display={},
+                               description='', field_choice={}, boolean_field_display={},
                                default_value=None, field_template='', label={}, placeholder=''))
 
         field_list.append(dict(field_key='workflow.workflow_name', field_name=u'工作流名称', field_value=workflow_name,
                                order_id=60, field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单所属工作流的名称',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
 
         field_list.append(dict(field_key='creator', field_name=u'创建人', field_value=ticket_obj.creator, order_id=80,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的创建人',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='gmt_created', field_name=u'创建时间',
                                field_value=str(ticket_obj.gmt_created)[:19], order_id=100,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的创建时间',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='gmt_modified', field_name=u'更新时间',
                                field_value=str(ticket_obj.gmt_modified)[:19], order_id=120,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的更新时间',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='state.state_name', field_name=u'状态名', field_value=state_name, order_id=41,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单当前状态的名称',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
 
@@ -1603,10 +1618,14 @@ class TicketBaseService(BaseService):
                 from tasks import run_flow_task  # 放在文件开头会存在循环引用
                 run_flow_task.apply_async(args=[ticket_id, ticket_obj.participant, ticket_obj.state_id],
                                           queue='loonflow')
-            # 目标状态处理人类型是hook，需要出发hook
-            if ticket_obj.participant_type_id == constant_service_ins.PARTICIPANT_TYPE_HOOK:
+            # 目标状态处理人类型是hook，需要触发hook
+            elif ticket_obj.participant_type_id == constant_service_ins.PARTICIPANT_TYPE_HOOK:
                 from tasks import flow_hook_task  # 放在文件开头会存在循环引用
                 flow_hook_task.apply_async(args=[ticket_id], queue='loonflow')
+            # else:
+            #     # 通知消息
+            #     from tasks import send_ticket_notice
+            #     send_ticket_notice.apply_async(args=[ticket_id], queue='loonflow')
 
             return True, '修改工单状态成功'
 
@@ -2035,6 +2054,33 @@ class TicketBaseService(BaseService):
             destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_PERSONAL
             if flag is False:
                 return False, destination_participant_list
+        
+        elif destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROLE_FIELD:
+            # 支持角色名指派
+            # 工单存在，先判断是否有修改此字段的权限，如果有且字段值有提供，则取提交的值
+            flag, field_info = cls.get_state_field_info(ticket_obj.state_id)
+            update_field_list = field_info.get('update_field_list')
+
+            flag, ticket_value_info = cls.get_ticket_all_field_value(ticket_id)
+
+            participant_list = participant.split(',')
+            destination_participant_list = []
+            for participant0 in participant_list:
+                if participant0 in update_field_list and ticket_req_dict.get(participant0):
+                    # 请求数据中包含需要的字段则从请求数据中获取
+                    r_name = ticket_req_dict.get(participant0)
+                else:
+                    # 处理工单时未提供字段的值,则从工单当前字段值中获取
+                    r_name = ticket_value_info.get(participant0)
+                flag, role_data = account_base_service_ins.get_role_by_name(r_name)
+                flag, destination_participant_list_t = account_base_service_ins.get_role_username_list(
+                    int(role_data.id))
+                destination_participant_list += destination_participant_list_t
+            destination_participant = ','.join(destination_participant_list)
+            destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_PERSONAL
+            if flag is False:
+                return False, destination_participant_list
+
         elif destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROLE:
             flag, destination_participant_list = account_base_service_ins.get_role_username_list(
                 int(destination_participant))
@@ -2507,7 +2553,8 @@ class TicketBaseService(BaseService):
         for chunk in file_obj.chunks():
             f.write(chunk)
         f.close()
-        return True, dict(file_name=file_name, file_path='/media/ticket_file/{}'.format(file_name))
+        return True, dict(file_name=file_name, file_path='/media/ticket_file/{}'.format(file_name),
+                          source_file_name=source_file_name)
 
     @classmethod
     def upload_file2(cls, request: any) -> tuple:

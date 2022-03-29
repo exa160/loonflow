@@ -24,7 +24,6 @@ urlpatterns = [
     path('/<int:ticket_id>/retreat', TicketRetreat.as_view()),
     path('/states', TicketsStates.as_view()),  # 批量获取工单状态
     path('/num_statistics', TicketsNumStatistics.as_view()),  # 批量获取工单状态
-    path('/upload_file', UploadFile.as_view()),  # 批量获取工单状态
-    path('/upload_file2', UploadFile2.as_view()),  # 批量获取工单状态，文件名固定
-
+    path('/upload_file', UploadFile.as_view()),  # 文件上传
+    path('/upload_file2', UploadFile2.as_view()),  # 文件上传，文件名固定
 ]
