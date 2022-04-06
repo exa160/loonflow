@@ -98,8 +98,8 @@ class TicketListView(LoonBaseView):
                         t_key_list = [t_dict['field_name'] for t_dict in ticket_result['field_list']]
                         t_value_list = [t_dict['field_value'] for t_dict in ticket_result['field_list']]
                         t_flowid = ticket_result['workflow_id']
-                        if t_flowid != 1:
-                            continue
+                        # if t_flowid != 1:
+                        #     continue
                         k_list = key_dict.get(t_flowid, [])
                         if len(k_list) == 0:
                             flag, custom_field_dict = workflow_custom_field_service_ins.get_workflow_custom_field(
