@@ -1,6 +1,7 @@
 import copy
 import json
 import datetime
+import logging
 import random
 
 import redis
@@ -19,7 +20,7 @@ from service.workflow.workflow_base_service import workflow_base_service_ins
 from service.workflow.workflow_state_service import workflow_state_service_ins
 from service.workflow.workflow_transition_service import workflow_transition_service_ins
 from service.workflow.workflow_custom_field_service import workflow_custom_field_service_ins
-
+logger = logging.getLogger('django')
 
 class TicketBaseService(BaseService):
     """
@@ -76,8 +77,9 @@ class TicketBaseService(BaseService):
         # 获取调用方app_name 有权限的workflow_id_list
 
         from service.workflow.workflow_permission_service import workflow_permission_service_ins
-        flag, result = workflow_permission_service_ins.get_workflow_id_list_by_permission('api', 'app', app_name)
 
+        flag, result = workflow_permission_service_ins.get_workflow_id_list_by_permission('api', 'app', app_name)
+        
         if not flag or not result.get('workflow_id_list'):
             return True, dict(ticket_result_restful_list=[], paginator_info=dict(per_page=per_page, page=page, total=0))
         else:
@@ -144,8 +146,8 @@ class TicketBaseService(BaseService):
                     set(app_workflow_id_list) - (set(app_workflow_id_list) - set(query_workflow_id_list)))
             else:
                 ending_workflow_id_list = app_workflow_id_list
-
-        # query_params &= Q(workflow_id__in=ending_workflow_id_list)
+        # logger.info(f"app_workflow_ids:{app_workflow_id_list}, admin flow id :")
+        # logger.info(f"workflow_ids:{workflow_ids}, is_admin:{kwargs.get('from_admin')},flow id :{ending_workflow_id_list}")
 
         if reverse:
             order_by_str = '-gmt_created'
@@ -628,7 +630,8 @@ class TicketBaseService(BaseService):
         kwargs['suggestion'] = suggestion
 
         if not kwargs.get('creator'):
-            kwargs['creator'] = kwargs.get('participant', '')
+            kwargs['creator'] = kwargs.get('participant', '')[:50]
+        kwargs['participant'] = str(kwargs.get('participant', ''))[:1000]
         new_ticket_flow_log = TicketFlowLog(**kwargs)
         new_ticket_flow_log.save()
         return True, dict(new_ticket_flow_log_id=new_ticket_flow_log.id)
@@ -731,57 +734,57 @@ class TicketBaseService(BaseService):
         field_list.append(dict(field_key='sn', field_name=u'流水号', field_value=ticket_obj.sn, order_id=10,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
                                field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO,
-                               description='', field_choice={}, boolean_field_display={}, default_value=None,
+                               description='工单的流水号', field_choice={}, boolean_field_display={}, default_value=None,
                                field_template='', label={}, placeholder=''))
         field_list.append(dict(field_key='title', field_name=u'标题', field_value=ticket_obj.title, order_id=20,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的标题',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='state_id', field_name=u'状态id', field_value=ticket_obj.state_id, order_id=40,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单当前状态的id',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='participant_info.participant_name', field_name=u'当前处理人',
                                field_value=participant_info_dict['participant_name'], order_id=50,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的当前处理人',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='participant_info.participant_alias', field_name=u'当前处理人',
                                field_value=participant_info_dict['participant_alias'], order_id=55,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
                                field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO,
-                               description='', field_choice={}, boolean_field_display={},
+                               description='工单当前处理人(alias)', field_choice={}, boolean_field_display={},
                                default_value=None, field_template='', label={}, placeholder=''))
 
         field_list.append(dict(field_key='workflow.workflow_name', field_name=u'工作流名称', field_value=workflow_name,
                                order_id=60, field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单所属工作流的名称',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
 
         field_list.append(dict(field_key='creator', field_name=u'创建人', field_value=ticket_obj.creator, order_id=80,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的创建人',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='gmt_created', field_name=u'创建时间',
                                field_value=str(ticket_obj.gmt_created)[:19], order_id=100,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的创建时间',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='gmt_modified', field_name=u'更新时间',
                                field_value=str(ticket_obj.gmt_modified)[:19], order_id=120,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单的更新时间',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
         field_list.append(dict(field_key='state.state_name', field_name=u'状态名', field_value=state_name, order_id=41,
                                field_type_id=constant_service_ins.FIELD_TYPE_STR,
-                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='',
+                               field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO, description='工单当前状态的名称',
                                field_choice={}, boolean_field_display={}, default_value=None, field_template='',
                                label={}, placeholder=''))
 
@@ -1622,10 +1625,6 @@ class TicketBaseService(BaseService):
             elif ticket_obj.participant_type_id == constant_service_ins.PARTICIPANT_TYPE_HOOK:
                 from tasks import flow_hook_task  # 放在文件开头会存在循环引用
                 flow_hook_task.apply_async(args=[ticket_id], queue='loonflow')
-            # else:
-            #     # 通知消息
-            #     from tasks import send_ticket_notice
-            #     send_ticket_notice.apply_async(args=[ticket_id], queue='loonflow')
 
             return True, '修改工单状态成功'
 
@@ -2553,8 +2552,7 @@ class TicketBaseService(BaseService):
         for chunk in file_obj.chunks():
             f.write(chunk)
         f.close()
-        return True, dict(file_name=file_name, file_path='/media/ticket_file/{}'.format(file_name),
-                          source_file_name=source_file_name)
+        return True, dict(file_name=file_name, file_path='/media/ticket_file/{}'.format(file_name))
 
     @classmethod
     def upload_file2(cls, request: any) -> tuple:
