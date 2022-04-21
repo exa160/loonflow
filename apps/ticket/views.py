@@ -1,16 +1,20 @@
 from base64 import encode
 from collections import defaultdict
 import json
+import logging
 from django.http import HttpResponse
 from django.views import View
 from schema import Schema, Regex, And, Or, Use, Optional
 
 from apps.loon_base_view import LoonBaseView
+from apps.ticket.models import TicketOutFile
 from service.account.account_base_service import account_base_service_ins
 from service.format_response import api_fileresponse, api_response
 from service.ticket.ticket_base_service import ticket_base_service_ins
 from service.workflow.workflow_custom_field_service import workflow_custom_field_service_ins
+from tasks import output_file_task
 
+logger = logging.getLogger('django')
 
 class TicketListView(LoonBaseView):
     post_schema = Schema({
@@ -70,8 +74,21 @@ class TicketListView(LoonBaseView):
                         page=paginator_info.get('page'), total=paginator_info.get('total'))
             code, msg = 0, ''
             if request_data.get('file', 0) == "true":
-                import pandas as pd
+                import datetime
+                now_time = datetime.datetime.now()
+                timestamp = str(datetime.datetime.timestamp(now_time))[:10]
+                last_file = TicketOutFile.objects.filter(creator=username).last()
+                if last_file is not None:
+                    diff_now = (now_time -last_file.gmt_created)
+                    if diff_now.seconds < 10:
+                        return api_response(-1, '提交过于频繁', {})
 
+                f_start = create_start[:10].replace('-', '')
+                f_end = create_end[:10].replace('-', '')
+                file_path = f'./media/temp/导出-{f_start}-{f_end}-{timestamp}.xlsx'
+                file_obj = TicketOutFile(file_path=file_path, creator=username, is_deleted=False)
+                file_obj.save()
+                # import pandas as pd
                 flag, result = ticket_base_service_ins.get_ticket_list(
                     sn=sn, title=title, username=username, create_start=create_start, create_end=create_end,
                     workflow_ids=workflow_ids, state_ids=state_ids, ticket_ids=ticket_ids, category=category,
@@ -80,73 +97,8 @@ class TicketListView(LoonBaseView):
                     from_admin=from_admin,
                     creator=creator)
 
-                out_dict = defaultdict(list)
-                key_dict = {}
-                for i in result.get('ticket_result_restful_list'):
-                    ticket_id = i.get('id', -1)
-                    if ticket_id == -1:
-                        continue
-                    flag, ticket_result = ticket_base_service_ins.get_ticket_detail(ticket_id, username)
-
-                    if flag:
-                        # code, data = 0, dict(value=result)
-                        # t_id = ticket_result['id']
-                        # t_creator = ticket_result['creator']
-                        # t_gmt_created = ticket_result['gmt_created']
-                        # t_sn = ticket_result['sn']
-                        # t_title = ticket_result['title']
-                        t_key_list = [t_dict['field_name'] for t_dict in ticket_result['field_list']]
-                        t_value_list = [t_dict['field_value'] for t_dict in ticket_result['field_list']]
-                        t_flowid = ticket_result['workflow_id']
-                        # if t_flowid != 1:
-                        #     continue
-                        k_list = key_dict.get(t_flowid, [])
-                        if len(k_list) == 0:
-                            flag, custom_field_dict = workflow_custom_field_service_ins.get_workflow_custom_field(
-                                t_flowid)
-                            t_list = []
-                            for value in custom_field_dict.values():
-                                field_name = value['field_name']
-                                t_list.append(field_name)
-                            key_dict.update({t_flowid: t_list + ['状态1', '状态1时间', '最新状态', '最后操作时间']})
-                        flag, log_result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, 10, 1, 0, 0)
-                        log_pages = log_result.get('paginator_info', {}).get('total', 0)
-                        log_res = log_result.get('ticket_flow_log_restful_list')
-                        state_1 = ''
-                        state_1_time = ''
-                        state_latest = ''
-                        state_latest_time = ''
-                        if len(log_res) > 1:
-                            state_1 = log_res[1].get('state', {}).get('state_name', '')
-                            state_1_time = log_res[1].get('gmt_created', '')
-                        if log_pages > 10:
-                            flag, log_result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, 10, 1,
-                                                                                           0, 1)
-                            log_res_f = log_result.get('ticket_flow_log_restful_list')[0]
-                        else:
-                            log_res_f = log_res[-1]
-                        state_latest = log_res_f.get('state', {}).get('state_name', '')
-                        state_latest_time = log_res_f.get('gmt_created', '')
-                        out_dict[t_flowid].append(
-                            pd.DataFrame([t_value_list + [state_1, state_1_time, state_latest, state_latest_time]],
-                                         columns=t_key_list + ['状态1', '状态1时间', '最新状态', '最后操作时间']))
-
-                        # msg = str(ticket_result).encode('utf-8')
-                from tempfile import TemporaryFile
-                f = TemporaryFile()
-                for key, value in out_dict.items():
-                    out_data = pd.concat([pd.DataFrame(columns=key_dict[key])] + value)
-                    f.write(out_data.to_csv(quoting=1).encode('utf-8'))
-                # f.write(str(key_dict[1]).strip('[]').encode('utf-8'))
-                # f.write('\r\n'.encode('utf-8'))
-                # f.write('\r\n'.join([str(l).strip('[]') for l in out_dict[1]]).encode('utf-8'))
-                # out_data = pd.DataFrame(out_dict[1], columns=key_dict[1])
-                # out_data = pd.DataFrame(out_dict[1])
-                # out_data.to_csv(f)
-                f.seek(0)
-                # with open(r'.\media\temp\派单平台导出全量清单.xlsx', 'rb') as f:
-                #     msg = f.read().decode('ansi').encode('utf8')
-                return api_fileresponse(f, f'派单平台导出-{create_start[:10]}-{create_end[:10]}.csv')
+                output_file_task.apply_async(args=[result, username, file_path, file_obj.id], queue='loonflow')
+                
         else:
             code, data, msg = -1, {}, result
         return api_response(code, msg, data)
@@ -767,6 +719,9 @@ class UploadFile(LoonBaseView):
             return api_response(0, '', result)
         else:
             return api_response(-1, result, {})
+        
+    def get(self, request, *args, **kwargs):
+        return api_response(0, '', {})
 
 
 class UploadFile2(LoonBaseView):
@@ -779,6 +734,22 @@ class UploadFile2(LoonBaseView):
         :return:
         """
         flag, result = ticket_base_service_ins.upload_file2(request)
+        if flag:
+            return api_response(0, '', result)
+        else:
+            return api_response(-1, result, {})
+
+    def get(self, request, *args, **kwargs):
+        return api_response(0, '', {})
+
+
+class ExportFile(LoonBaseView):
+    """
+    根据用户名获取导出的数据
+    """
+    def post(self, request, *args, **kwargs):
+        username = request.META.get('HTTP_USERNAME')
+        flag, result = ticket_base_service_ins.export_file(username)
         if flag:
             return api_response(0, '', result)
         else:

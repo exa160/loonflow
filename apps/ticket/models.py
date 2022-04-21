@@ -73,3 +73,10 @@ class TicketUser(BaseModel):
     username = models.CharField('关系人', max_length=100)
     in_process = models.BooleanField('待处理中', default=False)
     worked = models.BooleanField('处理过', default=False)
+
+class TicketOutFile(BaseModel):
+    """
+    工单导出文件
+    """
+    file_path = models.CharField('文件路径', max_length=500, default='', blank=True)
+    out_status = models.BooleanField('导出状态', default=False)

@@ -3,13 +3,14 @@ import json
 import datetime
 import logging
 import random
+import os
 
 import redis
 from django.db.models import Q
 from django.conf import settings
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from apps.workflow.models import CustomField
-from apps.ticket.models import TicketRecord, TicketCustomField, TicketFlowLog, TicketUser
+from apps.ticket.models import TicketOutFile, TicketRecord, TicketCustomField, TicketFlowLog, TicketUser
 from service.redis_pool import POOL
 from service.base_service import BaseService
 from service.common.log_service import auto_log
@@ -79,7 +80,8 @@ class TicketBaseService(BaseService):
         from service.workflow.workflow_permission_service import workflow_permission_service_ins
 
         flag, result = workflow_permission_service_ins.get_workflow_id_list_by_permission('api', 'app', app_name)
-        
+        # logger.info(f'app res: {result}')
+        # logger.info(f'kwargs: {kwargs}')
         if not flag or not result.get('workflow_id_list'):
             return True, dict(ticket_result_restful_list=[], paginator_info=dict(per_page=per_page, page=page, total=0))
         else:
@@ -182,7 +184,7 @@ class TicketBaseService(BaseService):
             if flag:
                 app_workflow_id_list = result.get('workflow_id_list')
                 query_params &= Q(workflow_id__in=app_workflow_id_list)
-                # logger.info(f"app_workflow_ids:{app_workflow_id_list}")
+                logger.info(f"app_workflow_ids:{app_workflow_id_list}")
             ticket_objects = TicketRecord.objects.filter(query_params).order_by(order_by_str).distinct()
         else:
             ticket_objects = TicketRecord.objects.filter(query_params).order_by(order_by_str).distinct()
@@ -348,7 +350,7 @@ class TicketBaseService(BaseService):
         # 如果下个状态为脚本处理，则开始执行脚本
         if destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROBOT:
             from tasks import run_flow_task  # 放在文件开头会存在循环引用
-            run_flow_task.apply_async(args=[new_ticket_obj.id, destination_participant, destination_state_id],
+            run_flow_task.apply_async(args=[new_ticket_obj.id, destination_participant, destination_state_id, username],
                                       queue='loonflow')
 
         # 如果下个状态是hook，开始触发hook
@@ -1277,7 +1279,7 @@ class TicketBaseService(BaseService):
 
         if destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROBOT:
             from tasks import run_flow_task  # 放在文件开头会存在循环引用
-            run_flow_task.apply_async(args=[ticket_id, destination_participant, destination_state_id], queue='loonflow')
+            run_flow_task.apply_async(args=[ticket_id, destination_participant, destination_state_id, username], queue='loonflow')
 
         # 如果下个状态是hook，开始触发hook
         if destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_HOOK:
@@ -1619,7 +1621,7 @@ class TicketBaseService(BaseService):
             # 如果目标状态是脚本处理中，需要触发脚本处理
             if ticket_obj.participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROBOT:
                 from tasks import run_flow_task  # 放在文件开头会存在循环引用
-                run_flow_task.apply_async(args=[ticket_id, ticket_obj.participant, ticket_obj.state_id],
+                run_flow_task.apply_async(args=[ticket_id, ticket_obj.participant, ticket_obj.state_id, username],
                                           queue='loonflow')
             # 目标状态处理人类型是hook，需要触发hook
             elif ticket_obj.participant_type_id == constant_service_ins.PARTICIPANT_TYPE_HOOK:
@@ -2539,32 +2541,100 @@ class TicketBaseService(BaseService):
 
     @classmethod
     def upload_file(cls, request: any) -> tuple:
-        import os, uuid
-        file_obj = request.FILES.get('file')
-        source_file_name = file_obj.name
-        # source_file_type = source_file_name.split('.')[-1]
-        # file_name = str(uuid.uuid1()) + '.' + source_file_type
-        base_name = os.path.basename(source_file_name)
-        source_file_type = os.path.splitext(source_file_name)[-1]
-        file_name = f'{base_name}-{str(uuid.uuid1())}{source_file_type}'
+        try:
+            import os, uuid
+            file_obj = request.FILES.get('file')
+            source_file_name = file_obj.name
+            # source_file_type = source_file_name.split('.')[-1]
+            # file_name = str(uuid.uuid1()) + '.' + source_file_type
+            base_name = os.path.basename(source_file_name)
+            source_file_type = os.path.splitext(source_file_name)[-1]
+            file_name = f'{base_name}-{str(uuid.uuid1())}{source_file_type}'
 
-        f = open(os.path.join(settings.MEDIA_ROOT, 'ticket_file/{}'.format(file_name)), 'wb')
-        for chunk in file_obj.chunks():
-            f.write(chunk)
-        f.close()
+            f = open(os.path.join(settings.MEDIA_ROOT, 'ticket_file/{}'.format(file_name)), 'wb')
+            for chunk in file_obj.chunks():
+                f.write(chunk)
+            f.close()
+        except Exception as e:
+            return False, dict(error=e)
         return True, dict(file_name=file_name, file_path='/media/ticket_file/{}'.format(file_name))
 
     @classmethod
     def upload_file2(cls, request: any) -> tuple:
-        import os
-        file_obj = request.FILES.get('file')
-        file_name = file_obj.name
+        try:
+            import os
+            file_obj = request.FILES.get('file')
+            file_name = file_obj.name
 
-        f = open(os.path.join(settings.MEDIA_ROOT, 'ticket_file/{}'.format(file_name)), 'wb')
-        for chunk in file_obj.chunks():
-            f.write(chunk)
-        f.close()
+            f = open(os.path.join(settings.MEDIA_ROOT, 'ticket_file/{}'.format(file_name)), 'wb')
+            for chunk in file_obj.chunks():
+                f.write(chunk)
+            f.close()
+        except Exception as e:
+            return False, dict(error=e)
         return True, dict(file_name=file_name, file_path='/media/ticket_file/{}'.format(file_name))
+
+
+    def export_file(cls, username: str) -> tuple:
+        out_list = []
+        file_ops = TicketOutFile.objects.filter(creator=username).order_by('-gmt_created')
+        for i in file_ops:
+            out_dict = {}
+            gmt_created = i.gmt_created
+            gmt_change = i.gmt_modified
+            is_deleted = i.is_deleted
+            out_status = i.out_status
+            file_path = i.file_path
+            id = i.id
+
+            file_name = os.path.split(file_path)[-1]
+
+            # 查询生成时间
+            time_diff = datetime.datetime.now() - gmt_created
+            diff_days = time_diff.days
+            diff_sec = time_diff.seconds
+            if diff_days > 0:
+                diff_msg = f'{diff_days}天前'
+            else:
+                if diff_sec < 60:
+                    diff_msg = '30秒前'
+                elif diff_sec >= 60 and diff_sec < 3600:
+                    diff_msg = f'{diff_sec//60}分钟前'
+                else:
+                    diff_msg = f'{diff_sec//3600}小时前'
+            
+            # 文件生成时间
+            if os.path.exists(file_path):
+                modified_diff = datetime.datetime.now() - datetime.datetime.fromtimestamp(os.path.getctime(file_path))
+                mdiff_days = modified_diff.days
+                mdiff_sec = modified_diff.seconds + mdiff_days*24*3600
+                if mdiff_sec >= 3600:
+                    if not is_deleted:
+                        is_deleted = True
+                        i.is_deleted = is_deleted
+                        i.save()
+                if  mdiff_sec >= 14400:
+                    i.delete()
+                    os.remove(file_path)
+                    continue
+            else:
+                # 文件生成超时
+                if diff_sec >= 3600:
+                    if not is_deleted:
+                        is_deleted = True
+                        i.is_deleted = is_deleted
+                        i.save()
+                if  diff_sec >= 28800:
+                    i.delete()
+                    continue
+            # status, delete: 00:exporting  01:timeout 10: download 11: deleted
+            status_list = ['exporting', 'timeout', 'download', 'deleted']
+            status = status_list[out_status*2+is_deleted]
+
+            out_dict.update({'diff_msg': diff_msg, 'file_name': file_name, 'id':id,
+                              'status':status})
+            out_list.append(out_dict)
+        return True, out_list
 
 
 ticket_base_service_ins = TicketBaseService()

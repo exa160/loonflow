@@ -2,6 +2,7 @@ import json
 
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.db.models import Q
+from apps.account.models import LoonUser
 from apps.workflow.models import CustomField
 from service.base_service import BaseService
 from service.common.log_service import auto_log
@@ -25,6 +26,13 @@ class WorkflowCustomFieldService(BaseService):
         for custom_field in custom_field_queryset:
             if custom_field.label:
                 label = custom_field.label
+                label_temp = json.loads(label)
+                if label_temp.get('return') == 'user' or label_temp.get('return') == 'self':
+                    all_user = LoonUser.objects.all()
+                    t = {}
+                    for i in all_user:
+                        t.update({i.username:i.alias})
+                    custom_field.field_choice = json.dumps(t)
             else:
                 label = '{}'
             format_custom_field_dict[custom_field.field_key] = dict(

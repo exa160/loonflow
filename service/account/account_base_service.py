@@ -356,7 +356,7 @@ class AccountBaseService(BaseService):
     @auto_log
     def get_role_by_name(cls, role_name: str)->tuple:
         """
-        get role's info by role_id
+        get role's info by role_name
         :param role_id:
         :return:
         """
@@ -384,7 +384,15 @@ class AccountBaseService(BaseService):
         app_token_obj = AppToken.objects.filter(app_name=app_name, is_deleted=0).first()
         if not app_token_obj:
             return False, 'appname is unauthorized'
+        from service.workflow.workflow_permission_service import workflow_permission_service_ins
 
+
+        if workflow_ids:
+            workflow_id_list = workflow_ids.split(',')
+            workflow_id_list = [int(workflow_id) for workflow_id in workflow_id_list]
+            return True, dict(workflow_id_list=workflow_id_list)
+        else:
+            return True, dict(workflow_id_list=[])
 
     @classmethod
     @auto_log
@@ -964,10 +972,10 @@ class AccountBaseService(BaseService):
         if flag:
             user_obj = result
             # if user_obj.type_id in (constant_service_ins.ACCOUNT_TYPE_SUPER_ADMIN, constant_service_ins.ACCOUNT_TYPE_WORKFLOW_ADMIN):
-            password_str = make_password('123456', None, 'pbkdf2_sha256')
+            password_str = make_password('WYdj@8510@', None, 'pbkdf2_sha256')
             user_obj.password = password_str
             user_obj.save()
-            return True, 'password has been reset to 123456'
+            return True, 'password has been reset to WYdj@8510@'
             # else:
             #     return False, 'just admin or workflow admin can be reset password'
         else:
