@@ -349,7 +349,7 @@ def flow_hook_task(ticket_id):
                  participant='hook', state_id=state_id, ticket_data=all_ticket_data_json, creator='loonrobot'))
 
 @app.task
-def output_file_task(result, username, file_path, file_obj_id):
+def output_file_task(ticket_ids, username, file_path, file_obj_id):
     """
     异步导出task
     """
@@ -357,8 +357,7 @@ def output_file_task(result, username, file_path, file_obj_id):
     file_obj = TicketOutFile.objects.filter(id=file_obj_id).first()
     try:
         key_dict = {}
-        for i in result.get('ticket_result_restful_list'):
-            ticket_id = i.get('id', -1)
+        for ticket_id in ticket_ids:
             if ticket_id == -1:
                 continue
             flag, ticket_result = ticket_base_service_ins.get_ticket_detail(ticket_id, username)

@@ -69,7 +69,7 @@ class TicketUser(BaseModel):
     """
     工单关系人, 用于加速待办工单及关联工单列表查询
     """
-    ticket = models.ForeignKey(TicketRecord, to_field='id', db_constraint=False, on_delete=False)
+    ticket = models.ForeignKey(TicketRecord, to_field='id', db_constraint=False, on_delete=models.DO_NOTHING)
     username = models.CharField('关系人', max_length=100)
     in_process = models.BooleanField('待处理中', default=False)
     worked = models.BooleanField('处理过', default=False)

@@ -96,8 +96,10 @@ class TicketListView(LoonBaseView):
                     per_page=paginator_info.get('total'), page=1, app_name=app_name, act_state_id=act_state_id,
                     from_admin=from_admin,
                     creator=creator)
+                
+                ticket_ids = [i.get('id', -1) for i in result.get('ticket_result_restful_list')]
 
-                output_file_task.apply_async(args=[result, username, file_path, file_obj.id], queue='loonflow')
+                output_file_task.apply_async(args=[ticket_ids, username, file_path, file_obj.id], queue='loonflow')
                 
         else:
             code, data, msg = -1, {}, result
