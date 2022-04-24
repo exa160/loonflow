@@ -9,7 +9,8 @@ import redis
 from django.db.models import Q
 from django.conf import settings
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from apps.workflow.models import CustomField
+from apps.account.models import LoonUser
+from apps.workflow.models import CustomField, State
 from apps.ticket.models import TicketOutFile, TicketRecord, TicketCustomField, TicketFlowLog, TicketUser
 from service.redis_pool import POOL
 from service.base_service import BaseService
@@ -315,6 +316,21 @@ class TicketBaseService(BaseService):
                                       creator=username, act_state_id=act_state_id, multi_all_person=multi_all_person)
         new_ticket_obj.save()
 
+        if destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_CHILD_NEW:
+                    # 获取目标状态的信息
+            flag, participant_info = cls.get_ticket_state_participant_info(destination_state_id, ticket_id=new_ticket_obj.id,
+                                                                        ticket_req_dict=request_data_dict)
+
+            if not flag:
+                return False, participant_info
+            destination_participant_type_id = participant_info.get('destination_participant_type_id', 0)
+            destination_participant = participant_info.get('destination_participant', '')
+            multi_all_person = participant_info.get('multi_all_person', '{}')  # 多人需要全部处理情况
+            
+        if request_data_dict.get('destination_participant', '') != '':
+            destination_participant_type_id = request_data_dict.get('destination_participant_type_id', 1)
+            destination_participant = request_data_dict.get('destination_participant', '')
+        
         # 更新工单关系人
         flag, result = cls.get_ticket_dest_relation(destination_participant_type_id, destination_participant)
         if flag is True:
@@ -391,6 +407,13 @@ class TicketBaseService(BaseService):
                     cls.handle_ticket(parent_ticket_obj.id, dict(transition_id=parent_ticket_transition_id,
                                                                  username='loonrobot',
                                                                  suggestion='所有子工单处理完毕，自动流转'))
+                else:
+                    if len(parent_ticket_transition_queryset) > 1:
+                        userdata = LoonUser.objects.filter(username=username, is_deleted=False).first()
+                        parent_ticket_transition_id = parent_ticket_transition_queryset[1].id
+                        cls.handle_ticket(parent_ticket_obj.id, dict(transition_id=parent_ticket_transition_id,
+                                                                    username='loonrobot',
+                                                                    suggestion=f'{userdata.alias}({userdata.phone}) 已处理'))
         return True, dict(new_ticket_id=new_ticket_obj.id)
 
     @classmethod
@@ -1273,9 +1296,10 @@ class TicketBaseService(BaseService):
                         .get_state_transition_queryset(parent_ticket_state_id)
                     # 含有子工单的工单状态只支持单路径流转到下个状态
                     parent_ticket_transition_id = parent_ticket_transition_queryset[0].id
-                    cls.handle_ticket(parent_ticket_obj.id, dict(transition_id=parent_ticket_transition_id,
+
+                    flag, msg = cls.handle_ticket(parent_ticket_obj.id, dict(transition_id=parent_ticket_transition_id,
                                                                  username='loonrobot',
-                                                                 suggestion='所有子工单处理完毕，自动流转'))
+                                                                 suggestion='所有子工单处理完毕，自动流转'), by_hook=True)
 
         if destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROBOT:
             from tasks import run_flow_task  # 放在文件开头会存在循环引用
@@ -2023,7 +2047,6 @@ class TicketBaseService(BaseService):
             destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_PERSONAL
 
         elif participant_type_id == constant_service_ins.PARTICIPANT_TYPE_PARENT_FIELD:
-
             flag, ticket_value_info = cls.get_ticket_all_field_value(parent_ticket_id)
 
             participant_list = participant.split(',')
@@ -2032,6 +2055,67 @@ class TicketBaseService(BaseService):
                 destination_participant_list.append(ticket_value_info.get(participant0))
             destination_participant = ','.join(destination_participant_list)
             destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_PERSONAL
+
+        elif participant_type_id == constant_service_ins.PARTICIPANT_TYPE_CHILD_NEW:  # 子工单模式
+            if not ticket_id:
+                # ticket_id 不存在，则为新建工单，从请求的数据中获取
+                participant_list = participant.split(',')
+                destination_participant_list = []
+                for participant0 in participant_list:
+                    destination_participant_list.append(ticket_req_dict.get(participant0, ''))
+                    ticket_req_dict.get('parent_ticket_id')
+                destination_participant = ','.join(destination_participant_list)
+                destination_participant = creator
+                destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_CHILD_NEW
+                
+            else:
+                # 工单存在，先判断是否有修改此字段的权限，如果有且字段值有提供，则取提交的值
+                init_state_obj = State.objects.filter(workflow_id=ticket_obj.workflow_id, is_deleted=False, type_id=constant_service_ins.STATE_TYPE_START).first()
+                if not init_state_obj:
+                    pass
+                else:
+                    flag, transition_queryset = workflow_transition_service_ins.get_state_transition_queryset(init_state_obj.id)
+
+                    transition = transition_queryset[0]
+                    transition_info_dict = dict(
+                        transition_id=transition.id, transition_name=transition.name,
+                        attribute_type_id=transition.attribute_type_id, field_require_check=transition.field_require_check,
+                        alert_enable=transition.alert_enable, alert_text=transition.alert_text
+                    )
+                        
+                    flag, field_info = cls.get_state_field_info(ticket_obj.state_id)
+                    update_field_list = field_info.get('update_field_list')
+
+                    flag, ticket_value_info = cls.get_ticket_all_field_value(ticket_id)
+
+                    participant_list = participant.split(',')
+                    destination_participant_list = []
+                    for participant0 in participant_list:
+
+                        if participant0 in update_field_list and ticket_req_dict.get(participant0):
+                            ret_dict = ticket_req_dict.copy()
+                            
+                            # 请求数据中包含需要的字段则从请求数据中获取
+                            ret_data = ticket_req_dict.get(participant0)
+                        else:
+                            # 处理工单时未提供字段的值,则从工单当前字段值中获取
+                            ret_dict = ticket_value_info.copy()
+                            
+                            ret_data = ticket_value_info.get(participant0)
+
+                        for i in ret_data.split(','):
+                            ret_dict.update({'parent_ticket_id':ticket_id,'username':creator,
+                                            'destination_participant_type_id':constant_service_ins.PARTICIPANT_TYPE_PERSONAL,
+                                            'parent_ticket_state_id':ticket_value_info['state_id'],
+                                            'transition_id':transition_info_dict['transition_id'],
+                                            'destination_participant':i})
+                            flag, msg = cls.new_ticket(ret_dict)
+                        logger.info([flag, msg])
+                        logger.info(ret_dict)
+                    
+                destination_participant = 'loonlobot'
+                destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_ROBOT
+
 
         elif participant_type_id == constant_service_ins.PARTICIPANT_TYPE_VARIABLE:
             participant_list = participant.split(',')
@@ -2548,8 +2632,8 @@ class TicketBaseService(BaseService):
             # source_file_type = source_file_name.split('.')[-1]
             # file_name = str(uuid.uuid1()) + '.' + source_file_type
             base_name = os.path.basename(source_file_name)
-            source_file_type = os.path.splitext(source_file_name)[-1]
-            file_name = f'{base_name}-{str(uuid.uuid1())}{source_file_type}'
+            source_file_type = os.path.splitext(base_name)
+            file_name = f'{source_file_type[0]}-{str(uuid.uuid1().hex)[:8]}{source_file_type[-1]}'
 
             f = open(os.path.join(settings.MEDIA_ROOT, 'ticket_file/{}'.format(file_name)), 'wb')
             for chunk in file_obj.chunks():

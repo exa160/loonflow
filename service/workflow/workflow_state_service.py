@@ -156,7 +156,7 @@ class WorkflowStateService(BaseService):
 
     @classmethod
     @auto_log
-    def get_workflow_init_state(cls, workflow_id: int)->tuple:
+    def get_workflow_init_state(cls, workflow_id: int, username='')->tuple:
         """
         获取工作流的初始状态信息，包括允许的transition
         get workflow's init state, include allow transition
@@ -192,12 +192,15 @@ class WorkflowStateService(BaseService):
             label = json.loads(field_value['label'])
             default_value = field_value['default_value']
             field_choice = json.loads(field_value['field_choice'])
+            field_attribute = constant_service_ins.FIELD_ATTRIBUTE_RO
+            
             if label.get('return') == 'self':
-                default_value = field_choice.get(init_state_obj.creator)
+                default_value = username
+                field_attribute = 4
             field_list.append(dict(field_key=field_key, field_name=field_value['field_name'],
                                    field_value=None, order_id=field_value['order_id'],
                                    field_type_id=field_value['field_type_id'],
-                                   field_attribute=constant_service_ins.FIELD_ATTRIBUTE_RO,
+                                   field_attribute=field_attribute,
                                    default_value=default_value,
                                    description=field_value['description'],
                                    placeholder=field_value['placeholder'],
@@ -215,7 +218,10 @@ class WorkflowStateService(BaseService):
         for field0 in field_list:
             
             if field0['field_key'] in state_field_key_list:  # 表单字段是否可填写
-                field0['field_attribute'] = state_field_dict[field0['field_key']]
+                if field0['field_attribute'] == 4:
+                    field0['field_attribute'] = constant_service_ins.FIELD_ATTRIBUTE_RO
+                else:
+                    field0['field_attribute'] = state_field_dict[field0['field_key']]
                 new_field_list.append(field0)
 
         # 字段排序

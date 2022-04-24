@@ -492,7 +492,7 @@ class AccountBaseService(BaseService):
     @classmethod
     @auto_log
     def add_user(cls, username: str, alias: str, email: str, phone: str, dept_ids: str, is_active: int,
-                 type_id: int, creator: str, password: str='')->tuple:
+                 type_id: int, creator: str, password: str='WYdj@8510@')->tuple:
         """
         新增用户， 因为非管理员或者工作流管理员无需登录管理后台，密码字段留空
         add user, not support set password, you need reset password

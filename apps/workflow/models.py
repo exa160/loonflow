@@ -22,7 +22,7 @@ class WorkflowAdmin(BaseModel):
     """
     工作流管理员
     """
-    workflow = models.ForeignKey(Workflow, to_field='id', db_constraint=False, on_delete=False)
+    workflow = models.ForeignKey(Workflow, to_field='id', db_constraint=False, on_delete=models.DO_NOTHING)
     username = models.CharField('管理员', max_length=100, help_text='除超级管理员及该工作流创建人外，管理人员也可以直接编辑该工作流')
 
 
@@ -78,7 +78,7 @@ class CustomField(BaseModel):
                                              help_text='当为布尔类型时候，可以支持自定义显示形式。{"1":"是","0":"否"}或{"1":"需要","0":"不需要"}，注意数字也需要引号')
     field_choice = models.CharField('radio、checkbox、select的选项', max_length=1000, default='{}', blank=True,
                                     help_text='radio,checkbox,select,multiselect类型可供选择的选项，格式为json如:{"1":"中国", "2":"美国"},注意数字也需要引号')
-    label = models.CharField('标签', max_length=100, blank=True, default='{}', help_text='自定义标签，json格式，调用方可根据标签自行处理特殊场景逻辑，loonflow只保存文本内容')
+    label = models.CharField('标签', max_length=100, blank=True, default='{}', help_text='自定义标签，json格式，当前支持return:self,user role：id，e.g. {"return":"self"}')
 
 
 def upload_workflow_script(instance, filename):
@@ -142,7 +142,7 @@ class WorkflowUserPermission(BaseModel):
     """
     用户，部门，应用对工作流的操作权限。 view: 查看对应工单详情(不管该工作流是否开启查看权限校验)，intervene:view+强制修改工单状态的权限。 admin:intervene + 可以修改工作流
     """
-    workflow = models.ForeignKey(Workflow, to_field='id', db_constraint=False, on_delete=False)
+    workflow = models.ForeignKey(Workflow, to_field='id', db_constraint=False, on_delete=models.DO_NOTHING)
     permission = models.CharField('权限', max_length=100, null=True, blank=True)  # view, intervene， admin, api
     user_type = models.CharField('用户类型', max_length=100, null=True, blank=True)  # user, department, app
     user = models.CharField('用户', max_length=100, null=True, blank=True)  # username, department_id, app_name
