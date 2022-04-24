@@ -2,7 +2,7 @@ import json
 
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.db.models import Q
-from apps.account.models import LoonUser
+from apps.account.models import LoonUser, LoonUserRole
 from apps.workflow.models import CustomField
 from service.base_service import BaseService
 from service.common.log_service import auto_log
@@ -30,8 +30,19 @@ class WorkflowCustomFieldService(BaseService):
                 if label_temp.get('return') == 'user' or label_temp.get('return') == 'self':
                     all_user = LoonUser.objects.all()
                     t = {}
-                    for i in all_user:
-                        t.update({i.username:i.alias})
+                    role_user_id_list = []
+                    if label_temp.get('role', '') != '':
+                        user_role_queryset = LoonUserRole.objects.filter(role_id=label_temp.get('role'), is_deleted=0).all()
+                        role_user_id_list = [user_role.user_id for user_role in user_role_queryset]
+                    
+                    role_user_id_list = set(role_user_id_list)
+                    if len(role_user_id_list) != 0:
+                        for i in all_user:
+                            if i.id in role_user_id_list:
+                                t.update({i.username:i.alias})
+                    else:
+                        for i in all_user:
+                            t.update({i.username:i.alias})
                     custom_field.field_choice = json.dumps(t)
             else:
                 label = '{}'

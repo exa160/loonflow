@@ -1,16 +1,22 @@
 # from __future__ import absolute_import, unicode_literals
+from collections import defaultdict
 import contextlib
 import os
 import sys
 import traceback
 import logging
+from venv import create
 from celery import Celery
+import pandas as pd
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings.config')
 import django
 from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
+
+CELERY_TIMEZONE = 'Asia/Shanghai'
+CELERY_ENABLE_UTC = False
 
 django.setup()
 
@@ -26,13 +32,14 @@ app.autodiscover_tasks()
 
 import json
 import requests
-from apps.ticket.models import TicketRecord
+from apps.ticket.models import TicketOutFile, TicketRecord
 from apps.workflow.models import Transition, State, WorkflowScript, Workflow, CustomNotice
 from service.account.account_base_service import account_base_service_ins
 from service.common.constant_service import constant_service_ins
 from service.ticket.ticket_base_service import TicketBaseService, ticket_base_service_ins
 from service.common.common_service import CommonService, common_service_ins
 from service.workflow.workflow_transition_service import WorkflowTransitionService, workflow_transition_service_ins
+from service.workflow.workflow_custom_field_service import workflow_custom_field_service_ins
 from django.conf import settings
 
 try:
@@ -43,16 +50,16 @@ except ImportError:
 logger = logging.getLogger('django')
 
 
-@app.task(bind=True)
-def debug_task(self):
-    print('Request: {0!r}'.format(self.request))
+# @app.task(bind=True)
+# def debug_task(self):
+#     print('Request: {0!r}'.format(self.request))
 
 
-@app.task
-def test_task(a, b):
-    print('a:', a)
-    print('b:', b)
-    print(a + b)
+# @app.task
+# def test_task(a, b):
+#     print('a:', a)
+#     print('b:', b)
+#     print(a + b)
 
 
 @contextlib.contextmanager
@@ -114,7 +121,7 @@ def run_flow_task(ticket_id, script_id_str, state_id, action_from='loonrobot'):
         new_ticket_flow_dict = dict(ticket_id=ticket_id, transition_id=transition_obj.id,
                                     suggestion=script_result_msg,
                                     participant_type_id=constant_service_ins.PARTICIPANT_TYPE_ROBOT,
-                                    participant='脚本:(id:{}, {}, {})'.format(script_obj.id, script_obj.name, script_result_msg)[:49],
+                                    participant='脚本:(id:{}, {}, {})'.format(script_obj.id, script_obj.name, script_result_msg[:40]),
                                     state_id=state_id, creator='loonrobot')
 
         ticket_base_service_ins.add_ticket_flow_log(new_ticket_flow_dict)
@@ -129,7 +136,8 @@ def run_flow_task(ticket_id, script_id_str, state_id, action_from='loonrobot'):
                                                                           transition_id=transition_obj.id), False, True)
         if flag:
             logger.info('******脚本执行成功,工单基础信息更新完成, ticket_id:{}******'.format(ticket_id))
-        return flag, msg
+        return flag, f'{script_result_msg},脚本:(id:{script_obj.id}, {script_obj.name}'
+        # return flag, msg
     else:
         return False, '工单当前处理人为非脚本，不执行脚本'
 
@@ -339,3 +347,74 @@ def flow_hook_task(ticket_id):
             dict(ticket_id=ticket_id, transition_id=0, suggestion=result.get('msg'),
                  participant_type_id=constant_service_ins.PARTICIPANT_TYPE_HOOK,
                  participant='hook', state_id=state_id, ticket_data=all_ticket_data_json, creator='loonrobot'))
+
+@app.task
+def output_file_task(result, username, file_path, file_obj_id):
+    """
+    异步导出task
+    """
+    out_dict = defaultdict(list)
+    file_obj = TicketOutFile.objects.filter(id=file_obj_id).first()
+    try:
+        key_dict = {}
+        for i in result.get('ticket_result_restful_list'):
+            ticket_id = i.get('id', -1)
+            if ticket_id == -1:
+                continue
+            flag, ticket_result = ticket_base_service_ins.get_ticket_detail(ticket_id, username)
+
+            if flag:
+                t_key_list = [t_dict['field_name'] for t_dict in ticket_result['field_list']]
+                t_value_list = [t_dict['field_value'] for t_dict in ticket_result['field_list']]
+                t_flowid = ticket_result['workflow_id']
+                state_info = ticket_result['state_info']
+                
+                # if t_flowid != 1:
+                #     continue
+                k_list = key_dict.get(t_flowid, [])
+                if len(k_list) == 0:
+                    flag, custom_field_dict = workflow_custom_field_service_ins.get_workflow_custom_field(
+                        t_flowid)
+                    t_list = []
+                    for value in custom_field_dict.values():
+                        field_name = value['field_name']
+                        t_list.append(field_name)
+                    key_dict.update({t_flowid: t_list + ['IT处理', 'IT处理时间', '最新状态', '最后操作时间']})
+                flag, log_result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, 10, 1, 0, 0)
+                log_pages = log_result.get('paginator_info', {}).get('total', 0)
+                log_res = log_result.get('ticket_flow_log_restful_list')
+                state_1 = ''
+                state_1_time = ''
+                state_latest = ''
+                state_latest_time = ''
+                if t_flowid == 1:
+                    if len(log_res) > 1:
+                        state_1 = log_res[1].get('state', {}).get('state_name', '')
+                        state_1_time = log_res[1].get('gmt_created', '')
+                elif t_flowid == 4:
+                    if len(log_res) > 2:
+                        state_1 = log_res[2].get('state', {}).get('state_name', '')
+                        state_1_time = log_res[2].get('gmt_created', '')
+                state_latest = state_info.get('name', '')
+                state_latest_time = ticket_result.get('gmt_modified', '')
+                out_dict[t_flowid].append(
+                    pd.DataFrame([t_value_list + [state_1, state_1_time, state_latest, state_latest_time]],
+                                    columns=t_key_list + ['IT处理', 'IT处理时间', '最新状态', '最后操作时间']))
+
+                # msg = str(ticket_result).encode('utf-8')
+        pw = pd.ExcelWriter(file_path)
+        for key, value in out_dict.items():
+            out_data = pd.concat([pd.DataFrame(columns=key_dict[key])] + value)
+            # f.write(out_data.to_csv(quoting=1).encode('utf-8'))
+            out_data.to_excel(pw, sheet_name=f'Flow{key}')
+
+            # pw.save()
+        pw.close()
+        file_obj.out_status = True
+        file_obj.save()
+    
+    except Exception as e:
+        logger.error(e)
+        logger.error(traceback.format_exc())
+        file_obj.is_deleted = True
+        file_obj.save()
