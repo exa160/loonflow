@@ -75,6 +75,7 @@ class ConstantService(BaseService):
         self.FIELD_ATTRIBUTE_RO = 1  # 只读
         self.FIELD_ATTRIBUTE_REQUIRED = 2  # 必填
         self.FIELD_ATTRIBUTE_OPTIONAL = 3  # 可选
+        self.FIELD_ATTRIBUTE_DEFAULT = 4  # 默认必填
 
         self.TICKET_PERMISSION_HANDLE = 1  # 处理权限
         self.TICKET_PERMISSION_VIEW = 2  # 查看权限

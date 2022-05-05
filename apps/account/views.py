@@ -73,7 +73,10 @@ class LoonUserView(LoonBaseView):
         is_active = request_data_dict.get('is_active')
         type_id = request_data_dict.get('type_id')
         creator = request.user.username
-        flag, result = account_base_service_ins.add_user(username, alias, email, phone, dept_ids, is_active, type_id, creator, password)
+        if password:
+            flag, result = account_base_service_ins.add_user(username, alias, email, phone, dept_ids, is_active, type_id, creator, password)
+        else:
+            flag, result = account_base_service_ins.add_user(username, alias, email, phone, dept_ids, is_active, type_id, creator)
         if flag is False:
             code, msg, data = -1, result, {}
         else:

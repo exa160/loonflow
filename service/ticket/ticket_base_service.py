@@ -10,7 +10,7 @@ from django.db.models import Q
 from django.conf import settings
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from apps.account.models import LoonUser
-from apps.workflow.models import CustomField, State
+from apps.workflow.models import CustomField, State  # Transition, WorkflowScript
 from apps.ticket.models import TicketOutFile, TicketRecord, TicketCustomField, TicketFlowLog, TicketUser
 from service.redis_pool import POOL
 from service.base_service import BaseService
@@ -23,6 +23,16 @@ from service.workflow.workflow_state_service import workflow_state_service_ins
 from service.workflow.workflow_transition_service import workflow_transition_service_ins
 from service.workflow.workflow_custom_field_service import workflow_custom_field_service_ins
 logger = logging.getLogger('django')
+
+class AttrDict(dict):
+    def __getattr__(self, item):
+        return self.get(item, '')
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __delattr__(self, key):
+        del self[key]
 
 class TicketBaseService(BaseService):
     """
@@ -285,9 +295,15 @@ class TicketBaseService(BaseService):
                                                                        ticket_req_dict=request_data_dict)
         if not flag:
             return False, participant_info
-        destination_participant_type_id = participant_info.get('destination_participant_type_id', 0)
-        destination_participant = participant_info.get('destination_participant', '')
-        multi_all_person = participant_info.get('multi_all_person', '{}')  # 多人需要全部处理情况
+        
+        if request_data_dict.get('destination_participant', '') != '':
+            destination_participant_type_id = request_data_dict.get('destination_participant_type_id', 0)
+            destination_participant = request_data_dict.get('destination_participant', '')
+            multi_all_person = request_data_dict.get('multi_all_person', '{}')  # 多人需要全部处理情况
+        else:
+            destination_participant_type_id = participant_info.get('destination_participant_type_id', 0)
+            destination_participant = participant_info.get('destination_participant', '')
+            multi_all_person = participant_info.get('multi_all_person', '{}')  # 多人需要全部处理情况
 
         # 生成流水号
         flag, result = cls.gen_ticket_sn(app_name)
@@ -1150,10 +1166,19 @@ class TicketBaseService(BaseService):
 
         # 校验是否所有必填字段都有提供，如果transition_id对应设置为不校验必填则直接通过
         flag, req_transition_obj = workflow_transition_service_ins.get_workflow_transition_by_id(transition_id)
-        if req_transition_obj.field_require_check:
 
+        if req_transition_obj.field_require_check:
             request_field_arg_list = [key for key, value in request_data_dict.items()
                                       if (key not in ['workflow_id', 'suggestion', 'username'])]
+            if state_obj.label != '':
+                check_data = json.loads(state_obj.label)
+                if 'check' in check_data.keys() and 'target' in check_data.keys():
+                    expression = check_data.get('check', [])[0]
+                    expression_format = expression.format(**request_data_dict)
+                    logger.info(expression_format)
+                    if eval(expression_format, {'__builtins__': None}):
+                        if request_data_dict.get(check_data.get('target')[0]) == '':
+                            return False, '请上传附件'
             for require_field in require_field_list:
                 if require_field not in request_field_arg_list:
                     return False, '此工单的必填字段为:{}'.format(','.join(require_field_list))
@@ -1288,18 +1313,31 @@ class TicketBaseService(BaseService):
                 for key, value in result.items():
                     sub_ticket_state_type_list.append(value.get('type_id'))
                 list_set = set(sub_ticket_state_type_list)
+                
+                
+                    
+                # # 父工单留痕
+                # if len(parent_ticket_transition_queryset) > 1:
+                #     userdata = LoonUser.objects.filter(username=username, is_deleted=False).first()
+                #     parent_ticket_transition_id = parent_ticket_transition_queryset[1].id
+                #     cls.handle_ticket(parent_ticket_obj.id, dict(transition_id=parent_ticket_transition_id,
+                #                                                 username='loonrobot',
+                #                                                 suggestion=f'{userdata.alias}({userdata.phone}) 已处理'), by_hook=True)
+                    
                 if list_set == {constant_service_ins.STATE_TYPE_END}:
+                    # 含有子工单的工单状态只支持单路径流转到下个状态
+                    # 获取父工单状态和流转
                     parent_ticket_obj = TicketRecord.objects.filter(id=ticket_obj.parent_ticket_id,
                                                                     is_deleted=0).first()
                     parent_ticket_state_id = parent_ticket_obj.state_id
                     flag, parent_ticket_transition_queryset = workflow_transition_service_ins \
-                        .get_state_transition_queryset(parent_ticket_state_id)
-                    # 含有子工单的工单状态只支持单路径流转到下个状态
+                                    .get_state_transition_queryset(parent_ticket_state_id)
                     parent_ticket_transition_id = parent_ticket_transition_queryset[0].id
 
                     flag, msg = cls.handle_ticket(parent_ticket_obj.id, dict(transition_id=parent_ticket_transition_id,
                                                                  username='loonrobot',
                                                                  suggestion='所有子工单处理完毕，自动流转'), by_hook=True)
+
 
         if destination_participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROBOT:
             from tasks import run_flow_task  # 放在文件开头会存在循环引用
@@ -2218,7 +2256,7 @@ class TicketBaseService(BaseService):
             if value == constant_service_ins.FIELD_ATTRIBUTE_REQUIRED:
                 require_field_list.append(key)
                 update_field_list.append(key)
-            if value == constant_service_ins.FIELD_ATTRIBUTE_OPTIONAL:
+            if value == constant_service_ins.FIELD_ATTRIBUTE_OPTIONAL or value == constant_service_ins.FIELD_ATTRIBUTE_DEFAULT:
                 update_field_list.append(key)
         return True, dict(require_field_list=require_field_list, update_field_list=update_field_list)
 
@@ -2720,5 +2758,33 @@ class TicketBaseService(BaseService):
             out_list.append(out_dict)
         return True, out_list
 
+    # @classmethod
+    # @auto_log
+    # def get_ticket_dict(cls, ticket_id: int) -> dict:
+    #     # 获取ticket信息
+    #     ticket_obj = TicketRecord.objects.filter(id=ticket_id, is_deleted=False).first()
+    #     return AttrDict(ticket_obj.__dict__)
+
+    # @classmethod
+    # @auto_log
+    # def get_script_dict(cls, script_id: int) -> dict:
+    #     script_obj = WorkflowScript.objects.filter(id=script_id, is_deleted=False, is_active=True).first()
+    #     return AttrDict(script_obj.__dict__)
+
+    # @classmethod
+    # @auto_log
+    # def get_transition_dict(cls, state_id: int) -> dict:
+    #     transition_obj = Transition.objects.filter(source_state_id=state_id, is_deleted=False).first()
+    #     return AttrDict(transition_obj.__dict__)
+
+    # @classmethod
+    # @auto_log
+    # def fresh_script_run_last_result(cls, ticket_id: int) -> dict:
+    #     # 脚本执行失败，状态不更新,标记任务执行结果
+    #     ticket_obj = TicketRecord.objects.filter(id=ticket_id, is_deleted=False).first()
+    #     ticket_obj.script_run_last_result = False
+    #     ticket_obj.save()
+    #     return True
+            
 
 ticket_base_service_ins = TicketBaseService()

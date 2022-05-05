@@ -24,10 +24,10 @@ class WorkflowCustomFieldService(BaseService):
         custom_field_queryset = CustomField.objects.filter(workflow_id=workflow_id, is_deleted=0).all()
         format_custom_field_dict = {}
         for custom_field in custom_field_queryset:
-            if custom_field.label:
+            if custom_field.label: # 自定义参数返回值部分
                 label = custom_field.label
                 label_temp = json.loads(label)
-                if label_temp.get('return') == 'user' or label_temp.get('return') == 'self':
+                if label_temp.get('return') == 'user' or label_temp.get('return') == 'self': 
                     all_user = LoonUser.objects.all()
                     t = {}
                     role_user_id_list = []
@@ -42,7 +42,7 @@ class WorkflowCustomFieldService(BaseService):
                                 t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})'})
                     else:
                         for i in all_user:
-                            t.update({i.username:f'{i.alias}({i.phone})'})
+                            t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})'})
                     custom_field.field_choice = json.dumps(t)
             else:
                 label = '{}'

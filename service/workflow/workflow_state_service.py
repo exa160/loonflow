@@ -216,7 +216,6 @@ class WorkflowStateService(BaseService):
 
         new_field_list = []
         for field0 in field_list:
-            
             if field0['field_key'] in state_field_key_list:  # 表单字段是否可填写
                 if field0['field_attribute'] == 4:
                     field0['field_attribute'] = constant_service_ins.FIELD_ATTRIBUTE_RO
