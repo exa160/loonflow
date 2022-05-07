@@ -74,7 +74,7 @@ class TicketBaseService(BaseService):
         :param state_ids: 状态id,str,逗号隔开
         :param ticket_ids: 工单id,str,逗号隔开
         :param category: 查询类别(创建的，待办的，关联的:包括创建的、处理过的、曾经需要处理但是没有处理的, 我处理过的)
-        :param reverse: 按照创建时间倒序
+        :param reverse: 按照创建时间倒序 0：时间顺序 1：时间倒序 2：修改时间顺序 3：修改时间倒序
         :param per_page:
         :param page:
         :param app_name:
@@ -162,10 +162,16 @@ class TicketBaseService(BaseService):
         # logger.info(f"app_workflow_ids:{app_workflow_id_list}, admin flow id :")
         # logger.info(f"workflow_ids:{workflow_ids}, is_admin:{kwargs.get('from_admin')},flow id :{ending_workflow_id_list}")
 
-        if reverse:
-            order_by_str = '-gmt_created'
-        else:
+        if reverse == 0:
             order_by_str = 'gmt_created'
+        elif reverse == 1:
+            order_by_str = '-gmt_created'
+        elif reverse == 2:
+            order_by_str = 'gmt_modified'
+        elif reverse == 3:
+            order_by_str = '-gmt_modified'
+        else:
+            order_by_str = '-gmt_created'
 
         if category == 'owner':
             query_params &= Q(creator=username)
@@ -1166,19 +1172,20 @@ class TicketBaseService(BaseService):
 
         # 校验是否所有必填字段都有提供，如果transition_id对应设置为不校验必填则直接通过
         flag, req_transition_obj = workflow_transition_service_ins.get_workflow_transition_by_id(transition_id)
-
         if req_transition_obj.field_require_check:
             request_field_arg_list = [key for key, value in request_data_dict.items()
                                       if (key not in ['workflow_id', 'suggestion', 'username'])]
             if state_obj.label != '':
                 check_data = json.loads(state_obj.label)
-                if 'check' in check_data.keys() and 'target' in check_data.keys():
-                    expression = check_data.get('check', [])[0]
-                    expression_format = expression.format(**request_data_dict)
-                    logger.info(expression_format)
-                    if eval(expression_format, {'__builtins__': None}):
-                        if request_data_dict.get(check_data.get('target')[0]) == '':
-                            return False, '请上传附件'
+                if 'check' in check_data.keys():
+                    for expression, target, msg in check_data.get('check'):
+                        expression_format = expression.format(**request_data_dict)
+                        logger.info(expression_format)
+                        if eval(expression_format, {'__builtins__': None}):
+                            if request_data_dict.get(target, '') == '':
+                                if '{' in msg:
+                                    msg = eval(msg.format(**request_data_dict), {'__builtins__': None})
+                                return False, msg
             for require_field in require_field_list:
                 if require_field not in request_field_arg_list:
                     return False, '此工单的必填字段为:{}'.format(','.join(require_field_list))
@@ -2151,8 +2158,8 @@ class TicketBaseService(BaseService):
                         logger.info([flag, msg])
                         logger.info(ret_dict)
                     
-                destination_participant = 'loonlobot'
-                destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_ROBOT
+                destination_participant = 'loonRobot'
+                destination_participant_type_id = constant_service_ins.PARTICIPANT_TYPE_PERSONAL
 
 
         elif participant_type_id == constant_service_ins.PARTICIPANT_TYPE_VARIABLE:
