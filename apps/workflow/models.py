@@ -9,6 +9,7 @@ class Workflow(BaseModel):
     工作流
     """
     name = models.CharField('名称', max_length=50)
+    loon_prefix = models.CharField('工单前缀', default='loonflow', max_length=10, help_text='生成工单流水号的前缀')
     description = models.CharField('描述', max_length=50)
     notices = models.CharField('通知', default='', blank=True, max_length=50, help_text='CustomNotice中的id.逗号隔开多个通知方式')
     view_permission_check = models.BooleanField('查看权限校验', default=True, help_text='开启后，只允许工单的关联人(创建人、曾经的处理人)有权限查看工单')

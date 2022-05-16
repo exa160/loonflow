@@ -4,6 +4,7 @@ import datetime
 import logging
 import random
 import os
+import traceback
 
 import redis
 from django.db.models import Q
@@ -312,7 +313,11 @@ class TicketBaseService(BaseService):
             multi_all_person = participant_info.get('multi_all_person', '{}')  # 多人需要全部处理情况
 
         # 生成流水号
-        flag, result = cls.gen_ticket_sn(app_name)
+        # 流水号自定义，非API前缀则使用自定义前缀
+        flag, workflow_base_obj = workflow_base_service_ins.get_by_id(workflow_id)
+        loon_prefix = workflow_base_obj.loon_prefix
+            
+        flag, result = cls.gen_ticket_sn(app_name, loon_prefix)
         if not flag:
             return False, result
         ticket_sn = result.get('ticket_sn')
@@ -324,7 +329,6 @@ class TicketBaseService(BaseService):
             act_state_id = constant_service_ins.TICKET_ACT_STATE_DRAFT
         else:
             act_state_id = constant_service_ins.TICKET_ACT_STATE_ONGOING
-        flag, workflow_base_obj = workflow_base_service_ins.get_by_id(workflow_id)
         title_template = workflow_base_obj.title_template
         title = request_data_dict.get('title', '')
         if title_template:
@@ -440,7 +444,7 @@ class TicketBaseService(BaseService):
 
     @classmethod
     @auto_log
-    def gen_ticket_sn(cls, app_name: str = '') -> tuple:
+    def gen_ticket_sn(cls, app_name: str = '', loon_prefix = '') -> tuple:
         redis_conn = redis.Redis(connection_pool=POOL)
         ticket_day_count_key = 'ticket_day_count_{}'.format(str(datetime.datetime.now())[:10])
         try:
@@ -466,7 +470,10 @@ class TicketBaseService(BaseService):
             sn_prefix = 'loonflow'
         else:
             if app_name == 'loonflow':
-                sn_prefix = 'loonflow'
+                if loon_prefix != '':
+                    sn_prefix = loon_prefix
+                else:
+                    sn_prefix = 'loonflow'
             else:
                 flag, result = account_base_service_ins.get_token_by_app_name(app_name)
                 if flag is False:
@@ -635,8 +642,9 @@ class TicketBaseService(BaseService):
                             new_ticket_custom_field_record = TicketCustomField(**new_dict)
                             new_ticket_custom_field_record.save()
                         except Exception as e:
-                            pass
-                            # logger.error(e, dt)
+                            # pass
+                            logger.error(traceback.format_exc())
+                            logger.error(e)
 
         return True, ''
 
