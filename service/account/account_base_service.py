@@ -479,7 +479,8 @@ class AccountBaseService(BaseService):
                 user_result_format_dict.pop('last_login')
                 user_result_format_dict.pop('email')
                 user_result_format_dict.pop('creator_info')
-                user_result_format_dict.pop('phone')
+                user_result_format_dict['phone'] = user_result_format_dict['phone'][7:]
+                # user_result_format_dict.pop('phone')
                 user_result_format_dict.pop('type_id')
                 user_result_format_dict.pop('gmt_created')
                 user_result_format_dict.pop('gmt_modified')

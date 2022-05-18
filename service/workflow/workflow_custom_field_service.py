@@ -2,6 +2,7 @@ import json
 
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.db.models import Q
+import pandas as pd
 from apps.account.models import LoonUser, LoonUserRole
 from apps.workflow.models import CustomField
 from service.base_service import BaseService
@@ -27,23 +28,34 @@ class WorkflowCustomFieldService(BaseService):
             if custom_field.label: # 自定义参数返回值部分
                 label = custom_field.label
                 label_temp = json.loads(label)
-                if label_temp.get('return') == 'user' or label_temp.get('return') == 'self': 
-                    all_user = LoonUser.objects.all()
-                    t = {}
-                    role_user_id_list = []
-                    if label_temp.get('role', '') != '':
-                        user_role_queryset = LoonUserRole.objects.filter(role_id=label_temp.get('role'), is_deleted=0).all()
-                        role_user_id_list = [user_role.user_id for user_role in user_role_queryset]
-                    
-                    role_user_id_list = set(role_user_id_list)
-                    if len(role_user_id_list) != 0:
-                        for i in all_user:
-                            if i.id in role_user_id_list:
+                # 字段label带字典的处理方式 发现{return:self\user}则传回用户信息到字段中
+                try:
+                    if label_temp.get('return') == 'user' or label_temp.get('return') == 'self': 
+                        all_user = LoonUser.objects.all()
+                        t = {}
+                        role_user_id_list = []
+                        if label_temp.get('role', '') != '':
+                            user_role_queryset = LoonUserRole.objects.filter(role_id=label_temp.get('role'), is_deleted=0).all()
+                            role_user_id_list = [user_role.user_id for user_role in user_role_queryset]
+                        
+                        role_user_id_list = set(role_user_id_list)
+                        if len(role_user_id_list) != 0:
+                            for i in all_user:
+                                if i.id in role_user_id_list:
+                                    t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})'})
+                        else:
+                            for i in all_user:
                                 t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})'})
-                    else:
-                        for i in all_user:
-                            t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})'})
-                    custom_field.field_choice = json.dumps(t)
+                        custom_field.field_choice = json.dumps(t)
+                    elif label_temp.get('return') == 'project_name':
+                        file_name = label_temp.get('file_name')
+                        if file_name:
+                            data = pd.read_excel(f'./media/ticket_file/{file_name}')
+                            custom_field.field_choice = json.dumps(data.set_index('项目名称',drop=False)['项目名称'].to_dict())
+                            
+                except Exception:
+                    pass
+                    
             else:
                 label = '{}'
             format_custom_field_dict[custom_field.field_key] = dict(
