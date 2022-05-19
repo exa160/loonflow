@@ -59,7 +59,7 @@ class TicketCustomField(BaseModel):
     radio_value = models.CharField('radio值', default='', max_length=50, blank=True)
     checkbox_value = models.CharField('checkbox值', default='', max_length=50, blank=True, help_text='逗号隔开多个选项')
     select_value = models.CharField('下拉列表值', default='', max_length=50, blank=True)
-    multi_select_value = models.CharField('多选下拉列表值', default='', max_length=50, blank=True, help_text='逗号隔开多个选项')
+    multi_select_value = models.CharField('多选下拉列表值', default='', max_length=200, blank=True, help_text='逗号隔开多个选项')
     text_value = models.TextField('文本值', default='', blank=True)
     username_value = models.CharField('用户名', max_length=50, default='', blank=True)
     multi_username_value = models.CharField('多选用户名', max_length=1000, default='', blank=True)
