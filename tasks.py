@@ -32,7 +32,7 @@ app.autodiscover_tasks()
 
 import json
 import requests
-from apps.ticket.models import TicketOutFile, TicketRecord
+from apps.ticket.models import TicketRecord
 from apps.workflow.models import Transition, State, WorkflowScript, Workflow, CustomNotice
 from service.account.account_base_service import account_base_service_ins
 from service.common.constant_service import constant_service_ins
@@ -88,10 +88,12 @@ def run_flow_task(ticket_id, script_id_str, state_id, action_from='loonrobot'):
     """
     script_id = int(script_id_str)
     ticket_obj = TicketRecord.objects.filter(id=ticket_id, is_deleted=False).first()
+    # ticket_obj = ticket_base_service_ins.get_ticket_dict(ticket_id)
     if ticket_obj.participant == script_id_str and ticket_obj.participant_type_id == constant_service_ins.PARTICIPANT_TYPE_ROBOT:
         ## 校验脚本是否合法
         # 获取脚本名称
         script_obj = WorkflowScript.objects.filter(id=script_id, is_deleted=False, is_active=True).first()
+        # script_obj = ticket_base_service_ins.get_script_dict(script_id)
         if not script_obj:
             return False, '脚本未注册或非激活状态'
 
@@ -117,6 +119,7 @@ def run_flow_task(ticket_id, script_id_str, state_id, action_from='loonrobot'):
         ticket_obj = TicketRecord.objects.filter(id=ticket_id, is_deleted=False).first()
         # 新增处理记录,脚本后只允许只有一个后续直连状态
         transition_obj = Transition.objects.filter(source_state_id=state_id, is_deleted=False).first()
+        # transition_obj = ticket_base_service_ins.get_transition_dict(state_id)
 
         new_ticket_flow_dict = dict(ticket_id=ticket_id, transition_id=transition_obj.id,
                                     suggestion=script_result_msg,
@@ -127,8 +130,10 @@ def run_flow_task(ticket_id, script_id_str, state_id, action_from='loonrobot'):
         ticket_base_service_ins.add_ticket_flow_log(new_ticket_flow_dict)
         if not script_result:
             # 脚本执行失败，状态不更新,标记任务执行结果
+            # ticket_obj = TicketRecord.objects.filter(id=ticket_id, is_deleted=False).first()
             ticket_obj.script_run_last_result = False
             ticket_obj.save()
+            # ticket_base_service_ins.fresh_script_run_last_result(ticket_id)
             return False, script_result_msg
         # 自动执行流转
         flag, msg = ticket_base_service_ins.handle_ticket(ticket_id, dict(username='loonrobot',
@@ -179,6 +184,8 @@ def send_ticket_notice(ticket_id):
     # 获取通知信息的标题和内容模板
     # 将通知内容，通知标题，通知人，作为hook的请求参数
     ticket_obj = TicketRecord.objects.filter(id=ticket_id, is_deleted=0).first()
+    # ticket_obj = ticket_base_service_ins.get_ticket_dict(ticket_id)
+    
     if not ticket_obj:
         return False, 'ticket is not exist or has been deleted'
 
@@ -264,14 +271,18 @@ def send_ticket_notice(ticket_id):
             subject = '工单提醒:{}'.format(title_result)
             mail_receivers = ['{}<{}>'.format(info.get('alias'), info.get('email')) for info in participant_info_list]
             html_message = f"""<h2>{title_result}</h2><br>
-                           {content_result}<br><br>工单来自:{last_state_name}，处理人:{last_participant_name}，流水号：{ticket_sn}<br>请访问<a href="http://36.134.147.61:10000/" target=blank>工单平台</a>进行处理"""
+                           {content_result}<br><br>工单来自:{last_state_name}，处理人:{last_participant_name}，流水号：{ticket_sn}<br>请访问<a href="http://47.110.59.169:10000/" target=blank>工单平台</a>进行处理"""
             # msg = EmailMultiAlternatives(subject, html_message, settings.EMAIL_FROM, mail_receivers)
             # msg.attach_alternative(html_message, "text/html")
             # msg.send()
-            send_mail(subject, '', settings.EMAIL_FROM, mail_receivers, html_message=html_message)
+            try:
+                send_mail(subject, '', settings.EMAIL_FROM, mail_receivers, html_message=html_message)
+                send_notice_result_list.append(dict(notice_id=notice_id, result='success', msg=''))
+            except Exception as e:
+                send_notice_result_list.append(dict(notice_id=notice_id, result='fail', msg=e.__str__()))
             # send_mail(subject, html_message.replace('</br>', '\r\n'), settings.EMAIL_FROM, mail_receivers)
-
-    return True, dict(send_notice_result_list=send_notice_result_list)
+        # logger.info(send_notice_result_list)
+    return True, send_notice_result_list
 
 
 @app.task
@@ -353,67 +364,23 @@ def output_file_task(ticket_ids, username, file_path, file_obj_id):
     """
     异步导出task
     """
-    out_dict = defaultdict(list)
-    file_obj = TicketOutFile.objects.filter(id=file_obj_id).first()
+    # flag, result = ticket_base_service_ins.get_ticket_list(**prapms)
+
+    # ticket_ids = [i.get('id', -1) for i in result.get('ticket_result_restful_list')]  
+
+    script_file = os.path.join(settings.MEDIA_ROOT, 'output_script', 'loonflow_output_script.py')
+    globals = {'ticket_ids': ticket_ids, 'username': username, 'file_path':file_path, 'file_obj_id':file_obj_id}
+    # 如果需要脚本执行完成后，工单不往下流转(也就脚本执行失败或调用其他接口失败的情况)，需要在脚本中抛出异常
     try:
-        key_dict = {}
-        for ticket_id in ticket_ids:
-            if ticket_id == -1:
-                continue
-            flag, ticket_result = ticket_base_service_ins.get_ticket_detail(ticket_id, username)
-
-            if flag:
-                t_key_list = [t_dict['field_name'] for t_dict in ticket_result['field_list']]
-                t_value_list = [t_dict['field_value'] for t_dict in ticket_result['field_list']]
-                t_flowid = ticket_result['workflow_id']
-                state_info = ticket_result['state_info']
-                
-                # if t_flowid != 1:
-                #     continue
-                k_list = key_dict.get(t_flowid, [])
-                if len(k_list) == 0:
-                    flag, custom_field_dict = workflow_custom_field_service_ins.get_workflow_custom_field(
-                        t_flowid)
-                    t_list = []
-                    for value in custom_field_dict.values():
-                        field_name = value['field_name']
-                        t_list.append(field_name)
-                    key_dict.update({t_flowid: t_list + ['IT处理', 'IT处理时间', '最新状态', '最后操作时间']})
-                flag, log_result = ticket_base_service_ins.get_ticket_flow_log(ticket_id, username, 10, 1, 0, 0)
-                log_pages = log_result.get('paginator_info', {}).get('total', 0)
-                log_res = log_result.get('ticket_flow_log_restful_list')
-                state_1 = ''
-                state_1_time = ''
-                state_latest = ''
-                state_latest_time = ''
-                if t_flowid == 1:
-                    if len(log_res) > 1:
-                        state_1 = log_res[1].get('state', {}).get('state_name', '')
-                        state_1_time = log_res[1].get('gmt_created', '')
-                elif t_flowid == 4:
-                    if len(log_res) > 2:
-                        state_1 = log_res[2].get('state', {}).get('state_name', '')
-                        state_1_time = log_res[2].get('gmt_created', '')
-                state_latest = state_info.get('name', '')
-                state_latest_time = ticket_result.get('gmt_modified', '')
-                out_dict[t_flowid].append(
-                    pd.DataFrame([t_value_list + [state_1, state_1_time, state_latest, state_latest_time]],
-                                    columns=t_key_list + ['IT处理', 'IT处理时间', '最新状态', '最后操作时间']))
-
-                # msg = str(ticket_result).encode('utf-8')
-        pw = pd.ExcelWriter(file_path)
-        for key, value in out_dict.items():
-            out_data = pd.concat([pd.DataFrame(columns=key_dict[key])] + value)
-            # f.write(out_data.to_csv(quoting=1).encode('utf-8'))
-            out_data.to_excel(pw, sheet_name=f'Flow{key}')
-
-            # pw.save()
-        pw.close()
-        file_obj.out_status = True
-        file_obj.save()
-    
+        with stdoutIO() as s:
+            # execfile(script_file, globals)  # for python 2
+            exec(open(script_file, encoding='utf-8').read(), globals)
+        script_result = True
+        # script_result_msg = ''.join(s.buflist)
+        script_result_msg = ''.join(s.getvalue())
     except Exception as e:
-        logger.error(e)
         logger.error(traceback.format_exc())
-        file_obj.is_deleted = True
-        file_obj.save()
+        script_result = False
+        script_result_msg = e.__str__()
+    
+    return script_result, script_result_msg

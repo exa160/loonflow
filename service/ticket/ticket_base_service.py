@@ -1188,7 +1188,7 @@ class TicketBaseService(BaseService):
                 if 'check' in check_data.keys():
                     for expression, target, msg in check_data.get('check'):
                         expression_format = expression.format(**request_data_dict)
-                        logger.info(expression_format)
+                        # logger.info(expression_format)
                         if eval(expression_format, {'__builtins__': None}):
                             if request_data_dict.get(target, '') == '':
                                 if '{' in msg:
