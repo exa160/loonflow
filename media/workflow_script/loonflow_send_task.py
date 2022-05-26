@@ -1,5 +1,4 @@
 import traceback
-from apps.ticket.models import TicketRecord
 from service.ticket.ticket_base_service import ticket_base_service_ins
 from service.account.account_base_service import account_base_service_ins
 import pandas as pd
@@ -105,8 +104,8 @@ def run():
         camera_id_value = msg2.get('value').strip()
         try:
             df_data = load_file(f_path)
-            df_data = pd.concat([i[['国标编码','所属项目','维护单位','是否交维','是否到期','一线维护人员','一线维护人员联系方式']] for i in list(df_data.values())])
-            df_data.columns = ['国标编码','所属项目','维护单位','是否交维','是否到期','project_principal','project_principal_phone']
+            df_data = pd.concat([i[['国标编码','区县','所属项目','维护单位','是否交维','是否到期','一线维护人员','一线维护人员联系方式']] for i in list(df_data.values())])
+            df_data.columns = ['国标编码','区县','所属项目','维护单位','是否交维','是否到期','project_principal','project_principal_phone']
             # df_data['project_principal_phone'] = df_data['project_principal_phone'].astype('object').fillna('NA').apply(lambda x:str(int(x)))
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -117,6 +116,7 @@ def run():
         if len(s_data) > 0:
             r_dict  = s_data.iloc[0,:].to_dict()
             request_data_dict.update({'project':r_dict.get('所属项目'),
+                                      'county_name':r_dict.get('区县'),
                          'project_status':r_dict.get('是否到期'),
                          'delivered':r_dict.get('是否交维'),
                          'maintenance_unit':r_dict.get('维护单位'),
@@ -141,6 +141,10 @@ def run():
     county_name, msg = ticket_base_service_ins.get_ticket_field_value(ticket_id, 'county_name')  # ticket_id会通过exec传过来
     if county_name:
         county_name_value = msg.get('value').strip().strip('区市县')
+        county_name_value2 = request_data_dict.get('county_name').strip().strip('区市县')
+        if county_name_value2 != county_name_value:
+            ret_msg += '县市信息填写错误，已修正；'
+            county_name_value = county_name_value2
         if county_name_value in ['武义', '东阳', '永康', '磐安', '婺城',
                                  '浦江', '金东', '义乌', '兰溪', '方大',
                                  '宏信', '智杰', '众网', '汇邦', '安诚',
