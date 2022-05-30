@@ -102,8 +102,8 @@ def run():
     if search_key != '':
         try:
             df_data = load_file(f_path)
-            ct_principal_data = df_data[['县市', '项目名称', '项目编号', '项目状态', '县市DICT管理员', '县市DICT管理员电话', '县市CT管理员', '县市CT管理员电话']].copy()
-            ct_principal_data.columns = ['county', 'project', 'project_code', 'project_type', 'dict_manager', 'dict_manager_phone', 'ct_principal', 'ct_principal_phone']
+            ct_principal_data = df_data[['县市', '项目名称', '项目编号', '项目类型', '所属客户', '县市DICT管理员', '县市DICT管理员电话', '县市CT管理员', '县市CT管理员电话']].copy()
+            ct_principal_data.columns = ['county', 'project', 'project_code', 'project_type', 'belong_customer', 'dict_manager', 'dict_manager_phone', 'ct_principal', 'ct_principal_phone']
             ct_principal_data['ct_principal_phone'] = ct_principal_data['ct_principal_phone'].astype('object')
             it_data = df_data[['一线维护人员', '一线维护人员电话']].copy()
             it_data.columns = ['it_principal', 'it_principal_phone']
@@ -123,12 +123,30 @@ def run():
         logger.info(search_value)
         if len(s_data) > 0:
             v_dict = get_user_data()
-            r_dict  = s_data.iloc[0,:].to_dict()
+            # 多个项目同名时的处理
+            key_list = ['it_principal', 'it_principal2', 'ct_principal', 'dict_manager']
+            
+            if len(s_data) > 1:
+                r_dict = {}
+                for i in range(len(s_data)):
+                    temp = s_data.iloc[i,:].to_dict()
+                    
+                    if len(r_dict) != 0:
+                        for i in key_list:
+                            principal_key = i
+                            principal_phone_key = f'{i}_phone'
+                            if temp[principal_key] not in r_dict[principal_key]:
+                                r_dict[principal_key] = r_dict[principal_key] + '/' + temp[principal_key]
+                                r_dict[principal_phone_key] = str(r_dict[principal_phone_key]) + '/' + str(temp[principal_phone_key])
+                        
+                    else:
+                        r_dict = temp
+                    
             request_data_dict.update({'project':r_dict.get('project'),
                                       'project_code':r_dict.get('project_code'),
                                     'project_type':r_dict.get('project_type'),
+                                    'belong_customer':r_dict.get('belong_customer')
                                     })
-            key_list = ['it_principal', 'it_principal2', 'ct_principal', 'dict_manager']
             for i in key_list:
                 principal_key = i
                 principal_phone_key = f'{i}_phone'
