@@ -68,9 +68,10 @@ def request_new(data):
 
 def send_loonflow(data_dict):
     # logger.info(data_dict)
-    data = {"main_title": '{}-{}-{}'.format(data_dict.get('县市').strip('县市区'), data_dict.get('主题'), data_dict.get('项目编号'))[:99],
-            # "project": data_dict.get('项目名称'),
-            "project_code": data_dict.get('项目编号'),
+    data = {"main_title": '{}-{}'.format(data_dict.get('县市').rstrip('县市区'), data_dict.get('主题'))[:99],
+            "project": data_dict.get('项目名称'),
+            'county': data_dict.get('县市').rstrip('县市区'),
+            # "project_code": data_dict.get('项目编号'),
             # 'belong_customer': data_dict.get('所属客户'),
             'customer_principal': data_dict.get('客户联系人'),
             'customer_phone': data_dict.get('客户联系人电话'),
@@ -88,7 +89,7 @@ def send_loonflow(data_dict):
     # t = MyThread(ticket_base_service_ins.new_ticket, args=(data, 'loonflow'))
     t = MyThread(request_new, args=(data,))
     t.start()
-    return data_dict.get('国标编码'), t
+    return data_dict.get('项目名称'), t
 
 
 def get_workflow_status():
@@ -206,15 +207,16 @@ def run():
         return True, '文件上传失败'
     in_data = load_file(f'.{file_path_values}')
     # 派单
-    id_list = in_data['项目编号'].to_list()
-    res_id_list = check_all_id(id_list)
-    send_id = set(id_list) - set(res_id_list)
-    send_data = in_data[in_data['项目编号'].isin(send_id)]
-    wy_id_list, fail_id_list = send_dataflow(send_data)
+    # id_list = in_data['项目名称'].to_list()
+    # res_id_list = check_all_id(id_list)
+    # send_id = set(id_list) - set(res_id_list)
+    # send_data = in_data[in_data['项目名称'].isin(send_id)]
+    # wy_id_list, fail_id_list = send_dataflow(send_data)
+    wy_id_list, fail_id_list = send_dataflow(in_data)
 
     msg_text = f'完成派单，共{len(id_list)}离线，派出{len(wy_id_list)}单'
-    if len(res_id_list) > 0:
-        msg_text += f'；已存在：{len(res_id_list)}单'
+    # if len(res_id_list) > 0:
+    #     msg_text += f'；已存在：{len(res_id_list)}单'
     if len(fail_id_list) > 0:
         msg_text += f'；{len(fail_id_list)}单派发失败'
     print(msg_text)
