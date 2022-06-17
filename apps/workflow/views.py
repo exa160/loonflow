@@ -1,4 +1,5 @@
 import json
+import os
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -1200,6 +1201,10 @@ class WorkflowMsg(LoonBaseView):
 
 
 class DownFile(LoonBaseView):
-    @manage_permission_check('workflow_admin')
+    @manage_permission_check('')
     def get(self, request, *args, **kwargs):
-        return api_fileresponse(open(r'.\media\ticket_file\派单平台导出全量清单.csv', 'rb'), 'all_camera_data.csv', 'text/csv')
+        request_data = request.GET
+        file_name = request_data.get('file_name')
+        if not file_name:
+            file_name = r'./media/ticket_temp/社会面全量点位信息.csv'
+        return api_fileresponse(open(file_name, 'rb'))
