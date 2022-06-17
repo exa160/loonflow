@@ -1,7 +1,8 @@
 import json
+import os
 
-from django.http import HttpResponse, StreamingHttpResponse
-
+from django.http import HttpResponse, FileResponse
+# from django.utils.encoding import escape_uri_path
 
 def api_response(code, msg='', data=''):
     """
@@ -14,7 +15,9 @@ def api_response(code, msg='', data=''):
     return HttpResponse(json.dumps(dict(code=code, data=data, msg=msg)), content_type="application/json")
 
 
-def api_fileresponse(data, name, content_type="application/octet-stream"):
-    res = StreamingHttpResponse(data, content_type=content_type)
-    res['Content-Disposition'] = 'attachment;filename="{}"'.format(name)
+def api_fileresponse(data):
+    res = FileResponse(data, as_attachment=True)
+    res.set_headers(data)
+    res['Content-Length'] = os.path.getsize(data.name)
     return res
+
