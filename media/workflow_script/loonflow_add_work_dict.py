@@ -76,7 +76,7 @@ def send_loonflow(data_dict):
             'customer_principal': data_dict.get('客户联系人'),
             'customer_phone': data_dict.get('客户联系人电话'),
             'err_type':data_dict.get('故障类型'),
-            'err_represent':data_dict.get('故障描述'),
+            'err_represent':data_dict.get('问题描述'),
             "fault_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
             "transition_id": 96, # 理论上使用 get_trans 函数获取
             # "file_data": '',
@@ -205,6 +205,12 @@ def run():
     file_path_values = msg.get('value', '')
     if file_path_values == '':
         return True, '文件上传失败'
+    if 'DICT工单项目文档' in file_path_values:
+        # print('DICT摄像头清单上传')
+        with open(f'.{file_path_values}', 'rb') as f:
+            with open(f'./media/ticket_temp/DICT工单项目文档.xlsx', 'wb') as g:
+                g.write(f.read())
+        return True, 'DICT工单项目文档上传完成'
     in_data = load_file(f'.{file_path_values}')
     # 派单
     # id_list = in_data['项目名称'].to_list()
