@@ -10,7 +10,7 @@ import time
 import os
 
 address = 'localhost:10000'
-address = 'localhost:5008'
+# address = 'localhost:5008'
 # username = 'loonflow'
 app_name = 'JHGA'
 username = 'admin'
@@ -209,8 +209,14 @@ def run():
     file_path_values = msg.get('value', '')
     if file_path_values == '':
         return True, '文件上传失败'
+    if 'GA全量点位信息' in file_path_values:
+        print('GA全量点位信息已替换')
+        with open(f'.{file_path_values}', 'rb') as f:
+            with open(f'./media/ticket_temp/GA全量点位信息.xlsx', 'wb') as g:
+                g.write(f.read())
+        return True, 'DICT摄像头清单上传'
     in_data = load_file(f'.{file_path_values}')
-    # 派单
+    # 派单["sn", "gmt_created","title","participant_info.participant_name", "creator", "county","project","platform","belong_customer","camrea_name","camrea_ip","belong_customer","customer_principal","customer_phone","is_repair","file_data","is_repair_it2","is_repair_ct","result_it","result_it2","result_ct","camera_name","camera_ip","county","it_principal","it_principal_name","it_principal","it_principal_name","it_principal2","it_principal2_name","ct_principal","ct_principal_name","file_data2","dict_manager","dict_manager_name"]
     id_list = in_data['国标编码'].to_list()
     res_id_list = check_all_id(id_list)
     send_id = set(id_list) - set(res_id_list)

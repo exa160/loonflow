@@ -1,7 +1,10 @@
 import os
 import time
 import traceback
-flag = r'./media/ticket_file/flag'
+import logging
+logger = logging.getLogger('django')
+
+flag = r'./media/ticket_temp/flag_flow01'
 if not os.path.exists(flag):
     with open(flag,'w') as a:
         pass
@@ -9,7 +12,7 @@ start_time = time.time()
 while os.stat(flag).st_mode != 33206:
     time.sleep(5)
     if (time.time() - start_time) > 3600:
-        print('锁定3600s超时')
+        logger.warning('锁定3600s超时')
         break
         
 os.chmod(flag, 33060)
@@ -24,7 +27,7 @@ import pandas as pd
 3.因为使用execfile/exec执行脚本, 不得使用if __name__ == '__main__'
 4.本脚本场景为服务器权限申请，工单中有自定义字段:host_ip
 """
-full_path = r'./media/ticket_file/派单平台导出全量清单.csv'
+full_path = r'./media/ticket_temp/社会面全量点位信息.csv'
 
 
 def load_file():
@@ -94,7 +97,6 @@ def run():
 try:
     run()
 except Exception as e:
-    with open(r'C:\loonflow\media\workflow_script\log.txt', 'w') as r:
-        r.write(traceback.format_exc())
-    print(e)
+    logger.error(traceback.print_exception())
+    logger.error(e)
 os.chmod(flag, 33206)

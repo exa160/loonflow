@@ -1,5 +1,8 @@
+import re
 import pandas as pd
 import logging
+
+from pyparsing import rest_of_line
 from apps.ticket.models import TicketRecord
 from service.ticket.ticket_base_service import ticket_base_service_ins
 
@@ -16,7 +19,7 @@ app_name = 'loonflow'
 username = 'admin'
 token = '16a39cac-7501-11ec-8471-a0a8cd5bbc9b'
 
-full_path = r'./media/ticket_file/派单平台导出全量清单.csv'
+full_path = r'./media/ticket_temp/社会面全量点位信息.csv'
 in_path = r'./media/ticket_file/导入.xlsx'
 
 logger = logging.getLogger('django')
@@ -43,11 +46,40 @@ class MyThread(threading.Thread):
         except Exception as e:  
             return None, None   
 
-def get_header():
+
+def threadLimit(set_func):
+    def runFunc(*args, **kwargs):
+        while threading.activeCount() > 8:
+            time.sleep(1)
+            pass
+        return set_func(*args, **kwargs)
+
+    return runFunc
+
+
+@threadLimit
+def start_t(t):
+    """用于启动多线程并限制线程数量
+
+    Args:
+        t (MyThread): 传入的多线程类
+
+    Returns:
+        MyThread: 多线程类
+    """
+    t.start()
+    return t
+
+
+def get_header(debug=False):
+    if debug:
+        username = 'admin'
+    else:
+        username = action_from
     timestamp = str(time.time())[:10]
     ori_str = timestamp + token
     signature = hashlib.md5(ori_str.encode(encoding='utf-8')).hexdigest()
-    headers = dict(signature=signature, timestamp=timestamp, appname=app_name, username=action_from)
+    headers = dict(signature=signature, timestamp=timestamp, appname=app_name, username=username)
     return headers
 
 
@@ -99,21 +131,44 @@ def send_loonflow(data_dict, trans_id):
 def get_workflow_status():
     per_page = 20000
     data = dict(per_page=per_page, category='all', act_state_id=1, workflow_ids=1)
-    r = requests.get(f'http://{address}/api/v1.0/tickets', headers=get_header(), params=data)
+    r = requests.get(f'http://{address}/api/v1.0/tickets', headers=get_header(True), params=data)
     
     total = r.json().get('data').get('total')
     if total > per_page:
         data = dict(per_page=total, category='all', act_state_id=1, workflow_ids=1)
-        r = requests.get(f'http://{address}/api/v1.0/tickets', headers=get_header(), params=data)
+        r = requests.get(f'http://{address}/api/v1.0/tickets', headers=get_header(True), params=data)
     result = r.json()
     return result
 
 
 def get_ticket_data(id):
-    r = requests.get(f'http://{address}/api/v1.0/tickets/{id}', headers=get_header())
-    result = r.json()
-    return result
+    for i in range(3):
+        try:
+            r = requests.get(f'http://{address}/api/v1.0/tickets/{id}', headers=get_header(True))
+            result = r.json()
+        except Exception as e:
+            logger.warning(e)
+            continue
+        else:
+            return result
+    logger.info(f'获取{id}失败')
+    return {}
 
+
+def get_close_data(tk_id):
+    """根据工单id获取camera_ip内容
+
+    Returns:
+        str: ret_data
+    """
+    tk_val = get_ticket_data(tk_id)
+    if tk_val == {}:
+        return ''
+    for data_dict in tk_val['data']['value']['field_list']:
+        if data_dict['field_key'] == 'camera_id':
+            ret_data = data_dict['field_value']
+            return ret_data
+        
 
 def check_all_id(id_list):
     id_list = set(id_list)
@@ -127,38 +182,51 @@ def check_all_id(id_list):
         # print(data_dict['id'],data_dict['title'])
         if data_dict['state_id'] == 2:
             continue
-        id = data_dict['id']
-        camera_id = ''
-        if False:
-            title = data_dict['title'].split('-')
-            if len(title) > 1:
-                camera_id = title[-1]
-        else:
-            tk_val = get_ticket_data(data_dict['id'])
-            for data_dict in tk_val['data']['value']['field_list']:
-                if data_dict['field_key'] == 'camera_id':
-                    camera_id = data_dict['field_value']
-                    camera_id_list.update({id:camera_id})
-                    break
-    
+        tk_id = data_dict['id']
+        t = MyThread(get_close_data, args=(tk_id,))
+        t = start_t(t)
+        camera_id_list.update({tk_id:t})
+
     # logger.info(f'inline_dict:{camera_id_list}')
-    for t_id, c_id in camera_id_list.items():
+    close_pool = []
+    logger.info('threading active->{}'.format(threading.activeCount()))
+    for t_id, t in camera_id_list.items():
+        t.join()
+        c_id = t.get_result()
         if c_id in id_list:
-            res = close_ticket(t_id)
-            if res.json()['code'] == 0:
-                res_id_list.append(camera_id)
-                logger.info(f'{camera_id}, 已恢复')
+            t2 = MyThread(close_ticket, args=(t_id,))
+            t2 = start_t(t2)
+            close_pool.append(t2)
+    for res_t in close_pool:
+        res_t.join()
+        res = res_t.get_result()
+
+        if res.json()['code'] == 0:
+            res_id_list.append(c_id)
+            logger.info(f'{c_id}, 已恢复')
+        else:
+            logger.warning(f'{c_id} close fail:{res.json().get("msg")}')
 
     return res_id_list
 
 
 def close_ticket(id):
-    data = dict(is_restore='已恢复,自动恢复（查看已经在线）')
-    r = requests.patch(f'http://{address}/api/v1.0/tickets/{id}/fields', headers=get_header(), json=data)
+    is_restore, msg = ticket_base_service_ins.get_ticket_field_value(id, 'is_restore')  # ticket_id会通过exec传过来
+    if is_restore:
+        try:
+            is_restore_val = msg.get('value')
+        except Exception as e:
+            is_restore_val = ''
+    else:
+            is_restore_val = ''
+    if not is_restore_val:
+        is_restore_val = '已恢复,自动恢复（脚本检测关单）'
+    data = dict(is_restore=f'已恢复,{is_restore_val.split(",")[1]}')
+    r = requests.patch(f'http://{address}/api/v1.0/tickets/{id}/fields', headers=get_header(True), json=data)
     # print(r, r.json())
     data = dict(suggestion='导入状态为已恢复', state_id=2)
     # r = requests.post(f'http://{address}/api/v1.0/tickets/{id}/close', headers=get_header(), json=data)
-    r = requests.put(f'http://{address}/api/v1.0/tickets/{id}/state', headers=get_header(), json=data)
+    r = requests.put(f'http://{address}/api/v1.0/tickets/{id}/state', headers=get_header(True), json=data)
     if r.status_code != 10:
         return r
     result = r.json()
@@ -270,7 +338,7 @@ def set_inline(full_data, wy_id_list):
 
         
 def run():
-    flag = r'./media/ticket_file/flag'
+    flag = r'./media/ticket_temp/flag_flow01'
     if not os.path.exists(flag):
         with open(flag,'w') as a:
             pass
@@ -287,6 +355,7 @@ def run():
         full_data, add_data = get_outline_camera(all_data, in_data)
         wy_id_list, fail_id_list = send_dataflow(add_data)
         full_data, o = set_outline(full_data, wy_id_list)
+        full_data.to_csv(full_path, quoting=1, encoding='ansi')
     finally:
         os.chmod(flag, 33206)  # 解锁标记
 
@@ -295,7 +364,6 @@ def run():
     res_id_list = check_all_id(id_list)
     # full_data, o = set_inline(full_data, res_id_list)
 
-    full_data.to_csv(full_path, quoting=1, encoding='ansi')
     # msg_text = f'完成派单,离线：{len(wy_id_list)+len(fail_id_list)}，派出：{len(wy_id_list)}'
     msg_text = f'离线:{len(wy_id_list)+len(fail_id_list)}，派出:{len(wy_id_list)}'
     if len(res_id_list) > 0:

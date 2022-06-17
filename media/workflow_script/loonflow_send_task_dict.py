@@ -13,10 +13,13 @@ logger = logging.getLogger('django')
 3.因为使用execfile/exec执行脚本, 不得使用if __name__ == '__main__'
 4.本脚本场景为服务器权限申请，工单中有自定义字段:host_ip
 """
-f_path = r".\media\ticket_file\DICT工单项目文档.xlsx"
+f_path = r".\media\ticket_temp\DICT工单项目文档.xlsx"
 
 def load_file(f_path):
-    return pd.read_excel(f_path)
+    return pd.read_excel(f_path, dtype={'县市CT管理员电话': str,
+                                        '县市DICT管理员电话':str,
+                                        '一线质保人员电话':str,
+                                        '一线维护人员电话':str})
 
 def demo_script_call():
     # 获取工单信息ip地址信息
@@ -104,13 +107,10 @@ def run():
             df_data = load_file(f_path)
             ct_principal_data = df_data[['县市', '项目名称', '项目编号', '项目类型', '所属客户', '县市DICT管理员', '县市DICT管理员电话', '县市CT管理员', '县市CT管理员电话']].copy()
             ct_principal_data.columns = ['county', 'project', 'project_code', 'project_type', 'belong_customer', 'dict_manager', 'dict_manager_phone', 'ct_principal', 'ct_principal_phone']
-            ct_principal_data['ct_principal_phone'] = ct_principal_data['ct_principal_phone'].astype('object')
             it_data = df_data[['一线维护人员', '一线维护人员电话']].copy()
             it_data.columns = ['it_principal', 'it_principal_phone']
-            it_data['it_principal_phone'] = it_data['it_principal_phone'].astype('object')
             it2_data = df_data[['一线质保人员', '一线质保人员电话']].copy()
             it2_data.columns = ['it_principal2', 'it_principal2_phone']
-            it2_data['it_principal2_phone'] = it2_data['it_principal2_phone'].astype('object')
             proncipal_data = pd.concat([ct_principal_data, it_data, it2_data], axis=True)
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -118,10 +118,11 @@ def run():
             ret_msg += '项目人员表信息异常；'
         else:
             s_data = proncipal_data[proncipal_data[search_key] == search_value]
-            logger.info(s_data)
-        logger.info(search_key)
-        logger.info(search_value)
+        #     logger.info(s_data)
+        # logger.info(search_key)
+        # logger.info(search_value)
         if len(s_data) > 0:
+            # 获取平台用户记录
             v_dict = get_user_data()
             # 多个项目同名时的处理
             key_list = ['it_principal', 'it_principal2', 'ct_principal', 'dict_manager']
@@ -141,7 +142,9 @@ def run():
                         
                     else:
                         r_dict = temp
-                    
+            else:
+                r_dict = s_data.iloc[0,:].to_dict()
+
             request_data_dict.update({'project':r_dict.get('project'),
                                       'project_code':r_dict.get('project_code'),
                                     'project_type':r_dict.get('project_type'),
