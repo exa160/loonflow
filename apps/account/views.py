@@ -657,7 +657,8 @@ class LoonRoleUserDetailView(LoonBaseView):
          :return:
          """
         user_id = kwargs.get('user_id', 0)
-        flag, result = account_base_service_ins.delete_role_user(user_id)
+        role_id = kwargs.get('role_id', 0)
+        flag, result = account_base_service_ins.delete_role_user_single(user_id, role_id)
 
         if flag is False:
             return api_response(-1, result, {})
