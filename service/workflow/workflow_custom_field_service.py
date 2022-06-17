@@ -42,10 +42,10 @@ class WorkflowCustomFieldService(BaseService):
                         if len(role_user_id_list) != 0:
                             for i in all_user:
                                 if i.id in role_user_id_list:
-                                    t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})'})
+                                    t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]}/{i.county})'})
                         else:
                             for i in all_user:
-                                t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})'})
+                                t.update({i.username:f'{i.alias}({i.phone[:3]}xxxx{i.phone[7:]})/{i.county}'})
                         custom_field.field_choice = json.dumps(t)
                     elif label_temp.get('return') == 'project_name':
                         file_name = label_temp.get('file_name')

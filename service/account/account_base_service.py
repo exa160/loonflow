@@ -651,6 +651,20 @@ class AccountBaseService(BaseService):
 
     @classmethod
     @auto_log
+    def delete_role_user_single(cls, user_id: int, role_id: int)->tuple:
+        """
+        删除角色用户
+        :param user_id:
+        :return:
+        """
+        role_user_obj = LoonUserRole.objects.filter(user_id=user_id, role_id=role_id, is_deleted=0)
+        if not role_user_obj:
+            return False, 'record is not existed or has been deleted'
+        role_user_obj.update(is_deleted=1)
+        return True, ''
+
+    @classmethod
+    @auto_log
     def update_role(cls, role_id: int, name: str, description: str, label: str)-> tuple:
         """
         update role
@@ -1019,7 +1033,7 @@ class AccountBaseService(BaseService):
 
         user = authenticate(username=username, password=source_password)
         if user is None:
-            return False, '原密码输入错误，不允许修改密码'
+            return False, '原密码输入错误'
         new_password_format = make_password(new_password, None, 'pbkdf2_sha256')
 
         user_obj.password = new_password_format
