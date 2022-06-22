@@ -437,6 +437,7 @@ class WorkflowStateView(LoonBaseView):
         'name': And(str, lambda n: n != '', error='name is needed'),
         'order_id': And(int, error='order_id is needed'),
         'type_id': And(int, error='type_id is needed'),
+        Optional('time_limit'): int,
         'participant_type_id': int,
         'distribute_type_id': And(int, lambda n: n != 0, error='distribute_type_id is needed'),
         Optional('remember_last_man_enable'): int,
@@ -545,6 +546,7 @@ class WorkflowStateDetailView(LoonBaseView):
         'name': And(str, lambda n: n != '', error='name is needed'),
         'order_id': And(int, error='order_id is needed'),
         'type_id': And(int, error='type_id is needed'),
+        Optional('time_limit'): int,
         'participant_type_id': int,
         'distribute_type_id': And(int, lambda n: n != 0, error='distribute_type_id is needed'),
         Optional('remember_last_man_enable'): int,
@@ -573,6 +575,7 @@ class WorkflowStateDetailView(LoonBaseView):
         is_hidden = request_data_dict.get('is_hidden', 0)
         order_id = int(request_data_dict.get('order_id', 0))
         type_id = int(request_data_dict.get('type_id', 0))
+        time_limit = int(request_data_dict.get('time_limit', 0))
         remember_last_man_enable = int(request_data_dict.get('remember_last_man_enable', 0))
         enable_retreat = int(request_data_dict.get('enable_retreat', 0))
         participant_type_id = int(request_data_dict.get('participant_type_id', 0))
@@ -586,7 +589,7 @@ class WorkflowStateDetailView(LoonBaseView):
 
         flag, result = workflow_state_service_ins.edit_workflow_state(
             state_id, workflow_id, name, is_hidden, order_id, type_id, remember_last_man_enable, participant_type_id,
-            participant, distribute_type_id, state_field_str, label, enable_retreat)
+            participant, distribute_type_id, state_field_str, label, enable_retreat, time_limit)
         if flag is False:
             code, msg, data = -1, result, {}
         else:

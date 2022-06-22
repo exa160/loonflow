@@ -40,6 +40,7 @@ class TicketListView(LoonBaseView):
         create_end = request_data.get('create_end', '')
         gmt_created_sort = request_data.get('gmt_created', '')
         gmt_modified_sort = request_data.get('gmt_modified', '')
+        gmt_limited_sort = request_data.get('gmt_limited', '')
         workflow_ids = request_data.get('workflow_ids', '')
         state_ids = request_data.get('state_ids', '')
         ticket_ids = request_data.get('ticket_ids', '')
@@ -55,7 +56,7 @@ class TicketListView(LoonBaseView):
         # app_name
         app_name = request.META.get('HTTP_APPNAME')
 
-        if gmt_created_sort or gmt_modified_sort:
+        if gmt_created_sort or gmt_modified_sort or gmt_limited_sort:
             if gmt_created_sort == 'ascend':
                 reverse = 0
             elif gmt_created_sort == 'descend':
@@ -64,6 +65,10 @@ class TicketListView(LoonBaseView):
                 reverse = 2
             elif gmt_modified_sort == 'descend':
                 reverse = 3
+            elif gmt_limited_sort == 'ascend':
+                reverse = 4
+            elif gmt_limited_sort == 'descend':
+                reverse = 5
         
         # 未指定创建起止时间则取最近一年的记录
         if not (create_start or create_end):

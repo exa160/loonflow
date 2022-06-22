@@ -7,7 +7,7 @@ import os
 import traceback
 
 import redis
-from django.db.models import Q
+from django.db.models import Q, F
 from django.conf import settings
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from apps.account.models import LoonUser
@@ -75,7 +75,7 @@ class TicketBaseService(BaseService):
         :param state_ids: 状态id,str,逗号隔开
         :param ticket_ids: 工单id,str,逗号隔开
         :param category: 查询类别(创建的，待办的，关联的:包括创建的、处理过的、曾经需要处理但是没有处理的, 我处理过的)
-        :param reverse: 按照创建时间倒序 0：时间顺序 1：时间倒序 2：修改时间顺序 3：修改时间倒序
+        :param reverse: 按照创建时间倒序 0：时间顺序 1：时间倒序 2：修改时间顺序 3：修改时间倒序 4：超时时间顺序
         :param per_page:
         :param page:
         :param app_name:
@@ -171,9 +171,15 @@ class TicketBaseService(BaseService):
             order_by_str = 'gmt_modified'
         elif reverse == 3:
             order_by_str = '-gmt_modified'
+        elif reverse == 4:
+            order_by_str = 'gmt_limited'
+            query_params &= Q(gmt_limited__gt=F('gmt_modified'))
+        elif reverse == 5:
+            order_by_str = '-gmt_limited'
+            query_params &= Q(gmt_limited__gt=F('gmt_modified'))
         else:
             order_by_str = '-gmt_created'
-
+        logger.info(reverse)
         if category == 'owner':
             query_params &= Q(creator=username)
             ticket_objects = TicketRecord.objects.filter(query_params).order_by(order_by_str).distinct()
@@ -1255,6 +1261,12 @@ class TicketBaseService(BaseService):
                     destination_participant = result.get('last_man')
 
         # 更新工单信息：基础字段及自定义字段， add_relation字段 需要下个处理人是部门、角色等的情况
+        # 先判断是否进入下个state
+        if destination_state_id != ticket_obj.state_id:
+            gmt_modified = ticket_obj.gmt_modified
+        else:
+            gmt_modified = ''
+        
         ticket_obj.state_id = destination_state_id
         ticket_obj.participant_type_id = destination_participant_type_id
         ticket_obj.participant = destination_participant
@@ -1270,7 +1282,13 @@ class TicketBaseService(BaseService):
             ticket_obj.act_state_id = constant_service_ins.TICKET_ACT_STATE_BACK
 
         ticket_obj.save()
-
+        if gmt_modified != '':
+            ticket_flow_log_queryset = TicketFlowLog.objects.filter(ticket_id=ticket_id, state_id=ticket_obj.state_id, is_deleted=0).all()
+            if len(ticket_flow_log_queryset) > 0:
+                ticket_obj.gmt_limited = ''
+            else:
+                ticket_obj.gmt_limited = ticket_obj.gmt_modified + datetime.timedelta(hours=destination_state.time_limit) 
+            ticket_obj.save()
         # 记录处理过的人
         if not (by_timer or by_task or by_hook):
             cls.update_ticket_worked(ticket_id, username)

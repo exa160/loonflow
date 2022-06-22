@@ -10,6 +10,7 @@ class TicketRecord(BaseModel):
     title = models.CharField(u'标题', max_length=100, blank=True, default='', help_text="工单的标题")
     workflow_id = models.IntegerField('关联的流程id', help_text='与workflow.Workflow流程关联')
     sn = models.CharField(u'流水号', max_length=25, help_text="工单的流水号")
+    gmt_limited = models.DateTimeField('限制时间')
     state_id = models.IntegerField('当前状态', help_text='与workflow.State关联')
     parent_ticket_id = models.IntegerField('父工单id', default=0, help_text='与ticket.TicketRecord关联')
     parent_ticket_state_id = models.IntegerField('对应父工单状态id', default=0, help_text='与workflow.State关联,子工单是关联到父工单的某个状态下的')

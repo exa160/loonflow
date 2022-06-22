@@ -353,7 +353,7 @@ class WorkflowStateService(BaseService):
     def edit_workflow_state(cls, state_id: int, workflow_id: int, name: str, is_hidden: int,
                             order_id: int, type_id: int, remember_last_man_enable: int, participant_type_id: int,
                             participant: str, distribute_type_id: int, state_field_str: str, label: str,
-                            enable_retreat: int)->tuple:
+                            enable_retreat: int, time_limit: int)->tuple:
         """
         新增工作流状态
         edit workflow state
@@ -376,7 +376,7 @@ class WorkflowStateService(BaseService):
         state_obj = State.objects.filter(id=state_id, is_deleted=0)
         if state_obj:
             state_obj.update(workflow_id=workflow_id, name=name,
-                             is_hidden=is_hidden, order_id=order_id, type_id=type_id,
+                             is_hidden=is_hidden, order_id=order_id, type_id=type_id,time_limit=time_limit,
                              remember_last_man_enable=remember_last_man_enable, participant_type_id=participant_type_id,
                              participant=participant, distribute_type_id=distribute_type_id,
                              state_field_str=state_field_str, label=label, enable_retreat=enable_retreat)
