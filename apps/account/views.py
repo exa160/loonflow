@@ -23,7 +23,8 @@ class LoonUserView(LoonBaseView):
         'dept_ids': str,
         'type_id': int,
         'is_active': Use(bool),
-
+        Optional('is_notice'): int,
+        Optional('county'): str,
     })
 
     @manage_permission_check('workflow_admin')
@@ -72,11 +73,12 @@ class LoonUserView(LoonBaseView):
         dept_ids = request_data_dict.get('dept_ids')
         is_active = request_data_dict.get('is_active')
         type_id = request_data_dict.get('type_id')
+        county = request_data_dict.get('county')
         creator = request.user.username
         if password:
-            flag, result = account_base_service_ins.add_user(username, alias, email, phone, dept_ids, is_active, type_id, creator, password)
+            flag, result = account_base_service_ins.add_user(username, alias, email, phone, dept_ids, is_active, type_id, county, creator, password)
         else:
-            flag, result = account_base_service_ins.add_user(username, alias, email, phone, dept_ids, is_active, type_id, creator)
+            flag, result = account_base_service_ins.add_user(username, alias, email, phone, dept_ids, is_active, type_id, county, creator)
         if flag is False:
             code, msg, data = -1, result, {}
         else:
@@ -94,7 +96,9 @@ class LoonUserDetailView(LoonBaseView):
         'phone': str,
         'dept_ids': str,
         'is_active': Use(bool),
-        'type_id': int
+        Optional('is_notice'): int,
+        'type_id': int,
+        Optional('county'): str,
     })
 
     @manage_permission_check('admin')
@@ -113,12 +117,14 @@ class LoonUserDetailView(LoonBaseView):
         alias = request_data_dict.get('alias')
         email = request_data_dict.get('email')
         phone = request_data_dict.get('phone')
+        county = request_data_dict.get('county')
         dept_ids = request_data_dict.get('dept_ids')
         type_id = request_data_dict.get('type_id')
 
         is_active = request_data_dict.get('is_active')
-        flag, result = account_base_service_ins.edit_user(user_id, username, alias, email, phone, dept_ids, is_active,
-                                                          type_id)
+        is_notice = request_data_dict.get('is_notice', 1)
+        flag, result = account_base_service_ins.edit_user(user_id, username, alias, email, phone, county, dept_ids, is_active,
+                                                          is_notice, type_id)
         if flag is not False:
             code, msg, data = 0, '', {}
         else:

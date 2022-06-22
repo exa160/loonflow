@@ -493,7 +493,7 @@ class AccountBaseService(BaseService):
     @classmethod
     @auto_log
     def add_user(cls, username: str, alias: str, email: str, phone: str, dept_ids: str, is_active: int,
-                 type_id: int, creator: str, password: str='WYdj@8510@')->tuple:
+                 type_id: int, county:str, creator: str, password: str='WYdj@8510@')->tuple:
         """
         新增用户， 因为非管理员或者工作流管理员无需登录管理后台，密码字段留空
         add user, not support set password, you need reset password
@@ -510,7 +510,7 @@ class AccountBaseService(BaseService):
         """
         password_str = make_password(password, None, 'pbkdf2_sha256')
         user_obj = LoonUser(username=username, alias=alias, email=email, phone=phone,
-                            is_active=is_active, type_id=type_id,
+                            is_active=is_active, type_id=type_id, county=county,
                             creator=creator, password=password_str)
         user_obj.save()
 
@@ -523,8 +523,8 @@ class AccountBaseService(BaseService):
 
     @classmethod
     @auto_log
-    def edit_user(cls, user_id: int, username: str, alias: str, email: str, phone: str, dept_ids: str, is_active: int,
-                  type_id: int)-> tuple:
+    def edit_user(cls, user_id: int, username: str, alias: str, email: str, phone: str, county:str, dept_ids: str, is_active: int,
+                  is_notice:int, type_id: int)-> tuple:
         """
         edit user
         :param user_id:
@@ -539,7 +539,7 @@ class AccountBaseService(BaseService):
         """
         user_obj = LoonUser.objects.filter(id=user_id, is_deleted=0)
         user_obj.update(username=username, alias=alias, email=email, phone=phone, is_active=is_active,
-                        type_id=type_id)
+                        is_notice=is_notice, type_id=type_id, county=county)
         # todo 更新部门信息
         dept_id_str_list = dept_ids.split(',')
         dept_id_int_list = [int(dept_id_str) for dept_id_str in dept_id_str_list]
